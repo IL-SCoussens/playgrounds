@@ -1,0 +1,1031 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hierarchy Parser Pipeline</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #1a1a2e;
+    --surface: #16213e;
+    --surface2: #1a2744;
+    --border: #2a3a5c;
+    --text: #e0e0e0;
+    --text-dim: #8892a8;
+    --accent: #4fc3f7;
+    --accent2: #81c784;
+    --accent3: #ffb74d;
+    --accent4: #ce93d8;
+    --red: #ef5350;
+    --mono: 'SF Mono', 'Cascadia Code', 'Fira Code', Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  }
+
+  body { font-family: var(--sans); background: var(--bg); color: var(--text); min-height: 100vh; line-height: 1.5; }
+
+  .layout { display: grid; grid-template-columns: 420px 1fr; height: 100vh; overflow: hidden; }
+  .controls { background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 16px; }
+  .main { display: flex; flex-direction: column; overflow: hidden; min-height: 0; }
+  .pipeline-view { flex: 1; overflow-y: auto; padding: 20px; min-height: 0; }
+
+  .prompt-bar { background: var(--surface); border-top: 1px solid var(--border); padding: 12px 20px; display: flex; gap: 12px; align-items: flex-start; }
+  .prompt-bar pre { flex: 1; font-family: var(--mono); font-size: 12px; color: var(--text-dim); white-space: pre-wrap; max-height: 80px; overflow-y: auto; line-height: 1.4; }
+  .copy-btn { background: var(--accent); color: #000; border: none; padding: 6px 14px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600; white-space: nowrap; flex-shrink: 0; }
+  .copy-btn:hover { opacity: 0.85; }
+
+  h1 { font-size: 16px; font-weight: 700; margin-bottom: 4px; color: var(--accent); }
+  .subtitle { font-size: 11px; color: var(--text-dim); margin-bottom: 16px; line-height: 1.4; }
+  .section-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-dim); margin: 16px 0 8px; }
+
+  textarea { width: 100%; font-family: var(--mono); font-size: 11px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 10px; resize: vertical; line-height: 1.5; }
+  textarea:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+
+  .preset-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+  .preset-btn { font-size: 11px; padding: 4px 10px; background: var(--surface2); color: var(--text-dim); border: 1px solid var(--border); border-radius: 4px; cursor: pointer; }
+  .preset-btn:hover { color: var(--text); border-color: var(--accent); }
+  .preset-btn.active { color: var(--accent); border-color: var(--accent); background: rgba(79,195,247,0.1); }
+
+  .mode-badge { display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 3px; margin-left: 8px; }
+  .mode-single { background: rgba(79,195,247,0.15); color: var(--accent); }
+  .mode-multi { background: rgba(206,147,216,0.15); color: var(--accent4); }
+
+  .domain-tag { display: inline-block; font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 3px; margin: 2px 3px 2px 0; }
+
+  .step { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 12px; overflow: hidden; }
+  .step-header { display: flex; align-items: center; gap: 10px; padding: 10px 14px; cursor: pointer; user-select: none; }
+  .step-header:hover { background: rgba(255,255,255,0.02); }
+  .step-num { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0; }
+  .step-title { font-size: 13px; font-weight: 600; flex: 1; }
+  .step-desc { font-size: 11px; color: var(--text-dim); }
+  .step-arrow { font-size: 12px; color: var(--text-dim); transition: transform 0.2s; }
+  .step.open .step-arrow { transform: rotate(90deg); }
+  .step-body { display: none; padding: 0 14px 14px; }
+  .step.open .step-body { display: block; }
+  .step-explain { font-size: 11px; color: var(--text-dim); margin-bottom: 10px; line-height: 1.5; padding: 8px 10px; background: rgba(79,195,247,0.05); border-radius: 4px; border-left: 3px solid var(--accent); }
+
+  .data-table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 11px; margin-top: 6px; }
+  .data-table th { text-align: left; padding: 5px 8px; border-bottom: 2px solid var(--border); color: var(--accent); font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; }
+  .data-table td { padding: 4px 8px; border-bottom: 1px solid rgba(255,255,255,0.05); white-space: nowrap; }
+  .data-table tr:hover td { background: rgba(255,255,255,0.02); }
+
+  .null-val { color: var(--red); font-style: italic; }
+  .self-ref { color: var(--accent3); }
+  .fill-tag { color: var(--accent4); font-size: 9px; margin-left: 4px; }
+  .level-tag { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 10px; font-weight: 600; }
+  .error-msg { color: var(--red); font-size: 12px; padding: 10px; background: rgba(239,83,80,0.1); border-radius: 6px; margin-top: 8px; }
+
+  .card-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+  .card { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; font-size: 11px; }
+  .card-label { font-size: 9px; text-transform: uppercase; color: var(--text-dim); letter-spacing: 0.05em; }
+  .card-value { font-family: var(--mono); font-weight: 600; margin-top: 2px; }
+
+  .pair-viz { display: flex; align-items: center; gap: 6px; margin: 4px 0; font-family: var(--mono); font-size: 11px; }
+  .pair-code { color: var(--accent); }
+  .pair-name { color: var(--accent2); }
+  .pair-arrow { color: var(--text-dim); }
+  .pair-single { color: var(--accent3); }
+  .row-count { font-size: 10px; color: var(--text-dim); margin-top: 4px; }
+  .scroll-table { max-height: 300px; overflow-y: auto; border: 1px solid var(--border); border-radius: 4px; }
+
+  .domain-section { margin: 12px 0; padding: 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; }
+  .domain-section-title { font-size: 12px; font-weight: 700; margin-bottom: 8px; }
+  .domain-col-list { font-family: var(--mono); font-size: 10px; color: var(--text-dim); margin-top: 4px; }
+  .summary-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 10px; }
+  .summary-table th { text-align: left; padding: 6px 10px; border-bottom: 2px solid var(--border); color: var(--accent); font-size: 11px; }
+  .summary-table td { padding: 5px 10px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+  .summary-pass { color: var(--accent2); font-weight: 600; }
+
+  /* Tabs */
+  .tab-bar { display: flex; gap: 0; border-bottom: 2px solid var(--border); margin-bottom: 0; }
+  .tab-btn { padding: 8px 20px; font-size: 12px; font-weight: 600; background: none; border: none; color: var(--text-dim); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab-content { display: none; flex-direction: column; overflow: hidden; min-height: 0; }
+  .tab-content.active { display: flex; flex: 1; }
+
+  /* Flowchart */
+  .flowchart { padding: 20px; }
+  .fc-pipeline { display: flex; align-items: center; gap: 4px; margin-bottom: 24px; flex-wrap: wrap; }
+  .fc-step-box { padding: 8px 14px; border-radius: 6px; font-size: 11px; font-weight: 600; border: 1px solid var(--border); background: var(--surface); text-align: center; min-width: 80px; }
+  .fc-arrow { color: var(--text-dim); font-size: 16px; }
+  .fc-section { margin-bottom: 28px; }
+  .fc-section-title { font-size: 13px; font-weight: 700; margin-bottom: 12px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+  .fc-tree { position: relative; padding-left: 20px; }
+  .fc-node { display: flex; align-items: center; gap: 8px; margin: 6px 0; font-family: var(--mono); font-size: 11px; }
+  .fc-node-box { padding: 4px 10px; border-radius: 4px; border: 1px solid var(--border); background: var(--surface2); white-space: nowrap; }
+  .fc-node-box.root { border-color: var(--accent3); }
+  .fc-node-box.leaf { border-color: var(--accent); }
+  .fc-node-box.fill { border-style: dashed; border-color: var(--accent4); }
+  .fc-connector { color: var(--text-dim); font-size: 12px; }
+  .fc-level-label { font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 3px; margin-right: 4px; }
+  .fc-indent { padding-left: 28px; border-left: 1px dashed var(--border); margin-left: 12px; }
+  .fc-domain-block { margin-bottom: 20px; padding: 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+  .fc-domain-title { font-size: 12px; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+  .fc-fk-line { display: flex; align-items: center; gap: 6px; margin: 4px 0; font-size: 10px; color: var(--text-dim); font-family: var(--mono); }
+  .fc-fk-arrow { color: var(--accent4); }
+</style>
+</head>
+<body>
+
+<div class="layout">
+  <div class="controls">
+    <h1>Hierarchy Parser Pipeline</h1>
+    <div class="subtitle">
+      This tool teaches how flat CSVs become normalized hierarchies. Paste any CSV
+      and watch the pipeline discover its structure from cardinality alone \u2014 no
+      hard-coded column names. Each step explains what it does, why it matters,
+      and what the output enables. Try the presets, then edit the data to see
+      how the pipeline adapts.
+    </div>
+
+    <div class="section-label">Presets</div>
+    <div class="preset-row" id="presets"></div>
+
+    <div class="section-label">Input CSV (editable)</div>
+    <textarea id="csv-input" rows="20" spellcheck="false"></textarea>
+  </div>
+
+  <div class="main">
+    <div class="tab-bar">
+      <button class="tab-btn active" data-tab="pipeline">Pipeline</button>
+      <button class="tab-btn" data-tab="flowchart">Flowchart</button>
+    </div>
+    <div class="tab-content active" data-tab="pipeline">
+      <div class="pipeline-view" id="pipeline"></div>
+    </div>
+    <div class="tab-content" data-tab="flowchart">
+      <div class="pipeline-view" id="flowchart"></div>
+    </div>
+    <div class="prompt-bar">
+      <pre id="prompt-text"></pre>
+      <button class="copy-btn" id="copy-btn">Copy</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===================================================================
+// Presets
+// ===================================================================
+var PRESETS = {
+  "Cost Centers": [
+    "center,center_description,cost_center_parent,cost_center_parent_desc,portfolio_code,trading_group",
+    "P001,AB_CM:FALCON,TRDT,Total Traders,AB_CM,FALCON",
+    "P002,CD_EU:FALCON,TRDT,Total Traders,CD_EU,FALCON",
+    "P003,EF_US:REDOAK,TRDT,Total Traders,EF_US,REDOAK",
+    "P004,GH_AP:REDOAK,TRDT,Total Traders,GH_AP,REDOAK",
+    "P005,JK_FI:SUMMIT,CORT,Core Infra Group,JK_FI,SUMMIT",
+    "P006,LM_EQ:SUMMIT,CORT,Core Infra Group,LM_EQ,SUMMIT",
+    "P007,NP_BN:COBALT,CORT,Core Infra Group,NP_BN,COBALT",
+    "P008,QR_DA:COBALT,CORT,Core Infra Group,QR_DA,COBALT",
+    "P009,NULL,TRDT,Total Traders,NULL,NULL",
+    "P010,NULL,CORT,Core Infra Group,NULL,NULL"
+  ].join("\n"),
+
+  "Custodian Accounts": [
+    "street_account_code,agreement_code,agreement_type_code,agreement_type_desc,agreement_type_category_code,agreement_class,street_broker_code,street_broker_legal_name,street_ultimate_parent_code,street_ulitmate_parent_name,branch,street_legal_entity_code,street_legal_entity_name,street_account_type_desc,street_account_status_desc",
+    "MLP_1001,ISDA_1001,ISDA,ISDA,ISDA,Base Class,CGMI,Citigroup Global Markets Inc.,CI,Citigroup Inc.,Citigroup Global Markets Inc.-100 WALL ST-USA,Integrated Assets II LLC,Integrated Assets II LLC,Street,Active",
+    "MLP_1002,ISDA_1002,ISDA,ISDA,ISDA,Base Class,CGMI,Citigroup Global Markets Inc.,CI,Citigroup Inc.,Citigroup Global Markets Inc.-200 PARK AVE-USA,Kedalion Fund LP,Kedalion Fund LP,Exposure,Active",
+    "MLP_1003,FOA_1003,FOA,FOA,Futures and Options,Base Class,BARCL,Barclays Capital Ltd.,BPL,Barclays Bank PLC,Barclays Capital Ltd.-25 BANK ST-UK,Integrated Assets II LLC,Integrated Assets II LLC,Street,Active",
+    "MLP_1004,FOA_1004,FOA,FOA,Futures and Options,Base Class,BARCL,Barclays Capital Ltd.,BPL,Barclays Bank PLC,Barclays Capital Ltd.-1 CHURCHILL PL-UK,Helix Strategic Fund LP,Helix Strategic Fund LP,Custody,Active",
+    "MLP_1005,PBA_1005,PBA,PBA,Prime Brokerage,Base Class,GSB,Goldman Sachs Bank USA,GSI,Goldman Sachs International,Goldman Sachs Bank USA-200 WEST ST-USA,Kedalion Fund LP,Kedalion Fund LP,Street,Active",
+    "MLP_1006,PBA_1006,PBA,PBA,Prime Brokerage,Base Class,GSB,Goldman Sachs Bank USA,GSI,Goldman Sachs International,Goldman Sachs Bank USA-85 BROAD ST-USA,Grandview LLC,Grandview LLC,Exposure,Inactive",
+    "MLP_1007,NMA_1007,NMA,NMA,Securities Lending,Base Class,JPMS,J.P. Morgan Securities LLC,JPMAG,J.P. Morgan AG,J.P. Morgan Securities LLC-383 MADISON-USA,Helix Strategic Fund LP,Helix Strategic Fund LP,Street,Active",
+    "MLP_1008,TRIRP_1008,TRIRP,TRIRP,Repo,Sub-Agreement,CGMI,Citigroup Global Markets Inc.,CI,Citigroup Inc.,Citigroup Global Markets Inc.-100 WALL ST-USA,Grandview LLC,Grandview LLC,Settlement,Active",
+    "MLP_1009,NULL,NULL,NULL,NULL,Base Class,JPMS,J.P. Morgan Securities LLC,JPMAG,J.P. Morgan AG,J.P. Morgan Securities LLC-383 MADISON-USA,Integrated Assets II LLC,Integrated Assets II LLC,Street,Active",
+    "MLP_1010,NULL,NULL,NULL,NULL,Sub-Agreement,GSB,Goldman Sachs Bank USA,GSI,Goldman Sachs International,Goldman Sachs Bank USA-200 WEST ST-USA,Kedalion Fund LP,Kedalion Fund LP,Exposure,Active"
+  ].join("\n"),
+
+  "GICS Sectors": [
+    "stock,sector,industry_group",
+    "AAPL,Technology,Software & Services",
+    "MSFT,Technology,Software & Services",
+    "GOOG,Technology,Interactive Media",
+    "AMZN,Consumer,Retailing",
+    "TSLA,Consumer,Automobiles",
+    "F,Consumer,Automobiles",
+    "JPM,Financials,Banks",
+    "GS,Financials,Capital Markets",
+    "MS,Financials,Capital Markets",
+    "XOM,Energy,Oil & Gas",
+    "CVX,Energy,Oil & Gas",
+    "SLB,Energy,Energy Equipment"
+  ].join("\n"),
+
+  "Simple (2 levels)": [
+    "employee,department",
+    "Alice,Engineering",
+    "Bob,Engineering",
+    "Charlie,Sales",
+    "Diana,Sales",
+    "Eve,Marketing",
+    "Frank,Marketing"
+  ].join("\n")
+};
+
+var NULL_SENTINELS_SET = new Set(["NULL", "NaN", "nan", ""]);
+
+// Multi-domain keyword tables
+var DOMAIN_KEYWORDS = {
+  agreement_type: ["agreement_id", "agreement_code", "agreement_type", "agreement_class", "agreement_category"],
+  custodian: ["broker", "ultimate_parent", "ulitmate_parent", "branch"],
+  fund: ["legal_entity", "fund_family"],
+  account_type: ["account_type"],
+  status: ["account_status"]
+};
+var METADATA_KW = ["created", "updated", "inactivated", "insert_datetime", "broker_address", "settlement", "coverage_type", "control_agreement", "base_agreement"];
+var BASE_ENTITY_KW = ["street_account_id", "street_account_code"];
+var DOMAIN_COLORS = { base_entity: "#4fc3f7", agreement_type: "#ffb74d", custodian: "#81c784", fund: "#ce93d8", account_type: "#f48fb1", status: "#80deea", metadata: "#616161" };
+
+// ===================================================================
+// CSV Parsing
+// ===================================================================
+function parseCSV(text) {
+  var lines = text.trim().split("\n").map(function(l) { return l.trim(); }).filter(function(l) { return l; });
+  if (lines.length < 2) throw new Error("Need at least a header row and one data row");
+  var headers = lines[0].split(",").map(function(h) { return h.trim(); });
+  var rows = [];
+  for (var i = 1; i < lines.length; i++) {
+    var vals = lines[i].split(",").map(function(v) { return v.trim(); });
+    var row = {};
+    headers.forEach(function(h, j) { var v = vals[j] || ""; row[h] = NULL_SENTINELS_SET.has(v) ? null : v; });
+    rows.push(row);
+  }
+  return { headers: headers, rows: rows };
+}
+
+// ===================================================================
+// Mode detection
+// ===================================================================
+function detectMode(headers) {
+  var joined = headers.join(" ").toLowerCase();
+  var matchCount = 0;
+  for (var key in DOMAIN_KEYWORDS) {
+    if (DOMAIN_KEYWORDS[key].some(function(kw) { return joined.indexOf(kw) >= 0; })) matchCount++;
+  }
+  return matchCount >= 2 ? "multi" : "single";
+}
+
+// ===================================================================
+// Domain classification
+// ===================================================================
+function classifyColumns(headers) {
+  var domains = { base_entity: [], metadata: [] };
+  for (var d in DOMAIN_KEYWORDS) domains[d] = [];
+  var classified = new Set();
+  headers.forEach(function(col) { if (BASE_ENTITY_KW.indexOf(col) >= 0) { domains.base_entity.push(col); classified.add(col); } });
+  headers.forEach(function(col) {
+    if (classified.has(col)) return;
+    var cl = col.toLowerCase();
+    if (METADATA_KW.some(function(kw) { return cl.indexOf(kw) >= 0; })) { domains.metadata.push(col); classified.add(col); return; }
+    for (var domain in DOMAIN_KEYWORDS) {
+      if (DOMAIN_KEYWORDS[domain].some(function(kw) { return cl.indexOf(kw) >= 0; })) { domains[domain].push(col); classified.add(col); return; }
+    }
+    domains.metadata.push(col); classified.add(col);
+  });
+  return domains;
+}
+
+function identifySnowflakes(cols) {
+  var colSet = new Set(cols); var sf = new Set();
+  cols.forEach(function(col) {
+    if (col.endsWith("_id")) {
+      var prefix = col.slice(0, -3);
+      if (["_code", "_name", "_desc"].some(function(s) { return colSet.has(prefix + s); })) sf.add(col);
+    }
+  });
+  return sf;
+}
+
+// ===================================================================
+// Core pipeline functions
+// ===================================================================
+function analyzeCardinality(headers, rows) {
+  var info = {};
+  headers.forEach(function(col) {
+    var vals = rows.map(function(r) { return r[col]; });
+    var nonNull = vals.filter(function(v) { return v !== null; });
+    info[col] = { name: col, distinctCount: new Set(nonNull).size, nullCount: vals.length - nonNull.length, values: vals };
+  });
+  return info;
+}
+
+function isBijection(a, b) {
+  var pairs = new Set();
+  for (var i = 0; i < a.values.length; i++) {
+    if (a.values[i] !== null && b.values[i] !== null) pairs.add(a.values[i] + "|||" + b.values[i]);
+  }
+  return pairs.size === a.distinctCount;
+}
+
+function isNameCol(name) {
+  var lower = name.toLowerCase();
+  return ["description", "desc", "name", "label", "title"].some(function(k) { return lower.indexOf(k) >= 0; });
+}
+
+function detectPairs(headers, card) {
+  var byCard = {};
+  headers.forEach(function(col) { var dc = card[col].distinctCount; if (!byCard[dc]) byCard[dc] = []; byCard[dc].push(col); });
+  var paired = new Set(), pairs = [];
+  Object.values(byCard).forEach(function(group) {
+    if (group.length === 2) {
+      var a = group[0], b = group[1];
+      if (isBijection(card[a], card[b])) {
+        if (isNameCol(b) && !isNameCol(a)) pairs.push([a, b]);
+        else if (isNameCol(a) && !isNameCol(b)) pairs.push([b, a]);
+        else pairs.push([a, b]);
+        paired.add(a); paired.add(b);
+      }
+    } else if (group.length > 2) {
+      for (var i = 0; i < group.length; i++) {
+        for (var j = i + 1; j < group.length; j++) {
+          if (!paired.has(group[i]) && !paired.has(group[j]) && isBijection(card[group[i]], card[group[j]])) {
+            if (isNameCol(group[j])) pairs.push([group[i], group[j]]);
+            else pairs.push([group[j], group[i]]);
+            paired.add(group[i]); paired.add(group[j]);
+          }
+        }
+      }
+    }
+  });
+  headers.forEach(function(col) { if (!paired.has(col)) pairs.push([col, null]); });
+  return pairs;
+}
+
+function assignLevels(pairs, card) {
+  var ranked = pairs.slice().sort(function(a, b) { return card[b[0]].distinctCount - card[a[0]].distinctCount; });
+  return ranked.map(function(p, i) {
+    var typeName = p[0];
+    ["_4", "_code"].forEach(function(suf) { if (typeName.endsWith(suf)) typeName = typeName.slice(0, -suf.length); });
+    return { level: i + 1, codeCol: p[0], nameCol: p[1], typeName: typeName, distinctCount: card[p[0]].distinctCount };
+  });
+}
+
+function determineParents(levels, rows) {
+  var maps = {};
+  for (var i = 0; i < levels.length - 1; i++) {
+    var child = levels[i], parent = levels[i + 1];
+    var c2p = {};
+    rows.forEach(function(row) {
+      var cv = row[child.codeCol], pv = row[parent.codeCol];
+      if (cv !== null && pv !== null) { if (!c2p[cv]) c2p[cv] = new Set(); c2p[cv].add(pv); }
+    });
+    maps[child.level] = {};
+    Object.keys(c2p).forEach(function(k) { maps[child.level][k] = Array.from(c2p[k])[0]; });
+  }
+  return maps;
+}
+
+function buildTypeTable(levels) { return levels.map(function(lv) { return { code: lv.typeName, name: lv.typeName, level: lv.level }; }); }
+
+function buildNodeTable(levels, rows, parentMaps) {
+  var nodes = [], seen = new Set(), levelEntities = {};
+  var revLevels = levels.slice().reverse();
+  revLevels.forEach(function(level) {
+    var isRoot = level.level === levels[levels.length - 1].level;
+    var entities = {};
+    rows.forEach(function(row) {
+      var code = row[level.codeCol];
+      if (code === null || entities[code]) return;
+      var name = level.nameCol ? (row[level.nameCol] || code) : code;
+      var parent;
+      if (isRoot) parent = code;
+      else if (parentMaps[level.level] && parentMaps[level.level][code]) parent = parentMaps[level.level][code];
+      else parent = code;
+      entities[code] = { name: name, parent: parent };
+    });
+    levelEntities[level.level] = entities;
+    Object.keys(entities).forEach(function(code) {
+      var key = code + "|" + level.typeName;
+      if (!seen.has(key)) { seen.add(key); nodes.push({ code: code, name: entities[code].name, parent: entities[code].parent, type: level.typeName, origin: "natural" }); }
+    });
+  });
+  revLevels.forEach(function(srcLevel) {
+    if (srcLevel.level === 1) return;
+    var entities = levelEntities[srcLevel.level] || {};
+    levels.forEach(function(tgtLevel) {
+      if (tgtLevel.level >= srcLevel.level) return;
+      Object.keys(entities).forEach(function(code) {
+        var key = code + "|" + tgtLevel.typeName;
+        if (!seen.has(key)) { seen.add(key); nodes.push({ code: code, name: entities[code].name, parent: entities[code].parent, type: tgtLevel.typeName, origin: "fill-down" }); }
+      });
+    });
+  });
+  var leaf = levels[0];
+  rows.forEach(function(row) {
+    if (row[leaf.codeCol] === null) return;
+    var hasNull = levels.slice(1, -1).some(function(lv) { return row[lv.codeCol] === null; });
+    if (hasNull) {
+      var code = row[leaf.codeCol], parentVal = null;
+      for (var k = 1; k < levels.length; k++) { if (row[levels[k].codeCol] !== null) { parentVal = row[levels[k].codeCol]; break; } }
+      if (parentVal) { var node = nodes.find(function(n) { return n.code === code && n.type === leaf.typeName; }); if (node) node.parent = parentVal; }
+    }
+  });
+  return nodes;
+}
+
+function buildPivot(typeTable, nodeTable) {
+  var levels = typeTable.slice().sort(function(a, b) { return a.level - b.level; });
+  var levelTypes = levels.map(function(l) { return l.code; });
+  var lookup = {};
+  nodeTable.forEach(function(n) { lookup[n.code + "|" + n.type] = n; });
+  var leafType = levelTypes[0];
+  var leafNodes = nodeTable.filter(function(n) { return n.type === leafType; });
+  var pivotRows = [];
+  leafNodes.forEach(function(leaf) {
+    var row = {}; row[leafType] = leaf.code; var currentCode = leaf.code;
+    for (var i = 1; i < levelTypes.length; i++) {
+      var ht = levelTypes[i];
+      if (lookup[currentCode + "|" + ht]) { row[ht] = currentCode; }
+      else { var prevNode = lookup[currentCode + "|" + levelTypes[i - 1]]; if (prevNode) currentCode = prevNode.parent; row[ht] = currentCode; }
+    }
+    pivotRows.push(row);
+  });
+  return { pivotRows: pivotRows, levelTypes: levelTypes };
+}
+
+// ===================================================================
+// Pipelines
+// ===================================================================
+function runSingleDomain(csvText) {
+  var parsed = parseCSV(csvText);
+  var card = analyzeCardinality(parsed.headers, parsed.rows);
+  var pairs = detectPairs(parsed.headers, card);
+  var levels = assignLevels(pairs, card);
+  var parentMaps = determineParents(levels, parsed.rows);
+  var typeTable = buildTypeTable(levels);
+  var nodeTable = buildNodeTable(levels, parsed.rows, parentMaps);
+  var pivot = buildPivot(typeTable, nodeTable);
+  return { mode: "single", headers: parsed.headers, rows: parsed.rows, card: card, pairs: pairs, levels: levels, typeTable: typeTable, nodeTable: nodeTable, pivotRows: pivot.pivotRows, levelTypes: pivot.levelTypes };
+}
+
+function processDomain(domainName, domainCols, rows) {
+  var snowflakes = identifySnowflakes(domainCols);
+  var hierCols = domainCols.filter(function(c) { return !snowflakes.has(c); });
+  if (!hierCols.length) return { domain: domainName, levels: [], typeTable: [], nodeTable: [], pairs: [], card: {}, snowflakes: Array.from(snowflakes) };
+  var card = analyzeCardinality(hierCols, rows);
+  var pairs = detectPairs(hierCols, card);
+  var levels = assignLevels(pairs, card);
+  var parentMaps = determineParents(levels, rows);
+  var typeTable = buildTypeTable(levels);
+  var nodeTable = buildNodeTable(levels, rows, parentMaps);
+  return { domain: domainName, levels: levels, typeTable: typeTable, nodeTable: nodeTable, pairs: pairs, card: card, snowflakes: Array.from(snowflakes) };
+}
+
+function runMultiDomain(csvText) {
+  var parsed = parseCSV(csvText);
+  var domainMap = classifyColumns(parsed.headers);
+  var domainResults = {};
+  var resolvedFKs = 0;
+  Object.keys(domainMap).forEach(function(name) {
+    if (name === "base_entity" || name === "metadata" || !domainMap[name].length) return;
+    domainResults[name] = processDomain(name, domainMap[name], parsed.rows);
+  });
+  var baseCodeCol = (domainMap.base_entity || []).find(function(c) { return c.indexOf("code") >= 0; }) || (domainMap.base_entity || [])[0] || parsed.headers[0];
+  var baseRows = [];
+  parsed.rows.forEach(function(row) {
+    if (row[baseCodeCol] === null) return;
+    var br = { code: row[baseCodeCol] };
+    Object.keys(domainResults).forEach(function(name) {
+      var dr = domainResults[name];
+      if (dr.levels.length) {
+        var leafCol = dr.levels[0].codeCol;
+        var fk = row[leafCol];
+        if (fk === null) {
+          for (var k = 0; k < dr.levels.length; k++) { var v = row[dr.levels[k].codeCol]; if (v !== null) { fk = v; resolvedFKs++; break; } }
+        }
+        br["fk_" + name] = fk;
+      }
+    });
+    baseRows.push(br);
+  });
+  var baseNodes = [], seenBase = new Set();
+  parsed.rows.forEach(function(row) {
+    var code = row[baseCodeCol];
+    if (code && !seenBase.has(code)) { seenBase.add(code); baseNodes.push({ code: code, name: code, parent: code, type: "custodian_account", origin: "natural" }); }
+  });
+  return { mode: "multi", headers: parsed.headers, rows: parsed.rows, domainMap: domainMap, domainResults: domainResults, baseRows: baseRows, baseNodes: baseNodes, resolvedFKs: resolvedFKs, baseCodeCol: baseCodeCol };
+}
+
+// ===================================================================
+// DOM helpers
+// ===================================================================
+function el(tag, attrs, children) {
+  var e = document.createElement(tag);
+  if (attrs) { Object.keys(attrs).forEach(function(k) {
+    var v = attrs[k];
+    if (k === "className") e.className = v; else if (k === "textContent") e.textContent = v;
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2).toLowerCase(), v);
+    else e.setAttribute(k, v);
+  }); }
+  if (children) { if (typeof children === "string") e.textContent = children; else if (Array.isArray(children)) children.forEach(function(c) { if (c) e.appendChild(c); }); else e.appendChild(children); }
+  return e;
+}
+function textNode(t) { return document.createTextNode(t); }
+function nullSpan() { return el("span", { className: "null-val" }, "NULL"); }
+function safeText(s) { return (s === null || s === undefined) ? nullSpan() : textNode(String(s)); }
+
+function makeTable(headers, rowData) {
+  var table = el("table", { className: "data-table" });
+  var thead = el("tr"); headers.forEach(function(h) { thead.appendChild(el("th", {}, h)); }); table.appendChild(thead);
+  rowData.forEach(function(rd) { var tr = el("tr"); rd.forEach(function(cell) { var td = el("td"); if (cell && cell.nodeType) td.appendChild(cell); else td.appendChild(safeText(cell)); tr.appendChild(td); }); table.appendChild(tr); });
+  return table;
+}
+
+function makeStep(num, title, color, desc, bodyEl, startOpen) {
+  var step = el("div", { className: "step" + (startOpen ? " open" : "") });
+  var header = el("div", { className: "step-header" });
+  var numEl = el("div", { className: "step-num" }); numEl.style.background = color; numEl.style.color = "#000"; numEl.textContent = String(num);
+  var infoDiv = el("div"); infoDiv.appendChild(el("div", { className: "step-title" }, title)); infoDiv.appendChild(el("div", { className: "step-desc" }, desc));
+  var arrow = el("div", { className: "step-arrow" }, "\u25B6");
+  header.appendChild(numEl); header.appendChild(infoDiv); header.appendChild(arrow);
+  header.addEventListener("click", function() { step.classList.toggle("open"); });
+  step.appendChild(header);
+  var body = el("div", { className: "step-body" }); body.appendChild(bodyEl); step.appendChild(body);
+  return step;
+}
+
+function makeExplain(text) { return el("div", { className: "step-explain" }, text); }
+
+var LEVEL_COLORS = ["var(--accent)", "var(--accent2)", "var(--accent3)", "var(--accent4)", "#f48fb1", "#80deea", "#dce775", "#bcaaa4"];
+function levelColor(i) { return LEVEL_COLORS[i % LEVEL_COLORS.length]; }
+
+function makeCardRow(headers, card) {
+  var cr = el("div", { className: "card-row" });
+  headers.forEach(function(col) {
+    var ci = card[col]; var crd = el("div", { className: "card" });
+    crd.appendChild(el("div", { className: "card-label" }, "Column"));
+    var v = el("div", { className: "card-value" }); v.textContent = col; crd.appendChild(v);
+    var st = el("div"); st.style.cssText = "margin-top:4px;font-size:10px;color:var(--text-dim)";
+    var dSpan = el("span"); dSpan.textContent = "distinct: ";
+    var dVal = el("b"); dVal.style.color = "var(--accent)"; dVal.textContent = String(ci.distinctCount);
+    dSpan.appendChild(dVal); st.appendChild(dSpan);
+    if (ci.nullCount) { var nSpan = el("span"); nSpan.textContent = "  nulls: "; var nVal = el("b"); nVal.style.color = "var(--red)"; nVal.textContent = String(ci.nullCount); nSpan.appendChild(nVal); st.appendChild(nSpan); }
+    crd.appendChild(st); cr.appendChild(crd);
+  });
+  return cr;
+}
+
+function makeNodeTableScroll(nodeTable) {
+  var scr = el("div", { className: "scroll-table" });
+  scr.appendChild(makeTable(["code", "name", "parent", "type", ""], nodeTable.map(function(n) {
+    var pc = el("span"); if (n.code === n.parent) { pc.className = "self-ref"; pc.textContent = n.parent + " (self)"; } else pc.textContent = n.parent;
+    var oc = el("span"); if (n.origin === "fill-down") { oc.className = "fill-tag"; oc.textContent = "FILL"; }
+    return [safeText(n.code), safeText(n.name), pc, safeText(n.type), oc];
+  })));
+  return scr;
+}
+
+// ===================================================================
+// Render single-domain
+// ===================================================================
+function renderSingle(r) {
+  var c = document.createDocumentFragment();
+
+  var s1 = el("div");
+  s1.appendChild(makeExplain("The first question: how many unique values does each column have? This is cardinality \u2014 the structural fingerprint of the data. A column with as many unique values as there are rows is the leaf (the most granular entity). A column with only 2-3 unique values is the root (the broadest grouping). Everything in between forms the hierarchy. No column names are hard-coded \u2014 the structure is discovered purely from the data."));
+  s1.appendChild(makeCardRow(r.headers, r.card));
+  c.appendChild(makeStep(1, "Cardinality Analysis", "var(--accent)", r.headers.length + " columns", s1, true));
+
+  var s2 = el("div");
+  s2.appendChild(makeExplain("Real-world data often has both a short code and a human-readable description for the same thing (e.g. \"TRDT\" and \"Total Traders\"). These always have the same cardinality and a perfect 1:1 mapping. Detecting these pairs avoids counting them as separate hierarchy levels \u2014 they represent one level, not two."));
+  r.pairs.forEach(function(p) {
+    var d = el("div", { className: "pair-viz" });
+    if (p[1]) { d.appendChild(el("span", { className: "pair-code" }, p[0])); d.appendChild(el("span", { className: "pair-arrow" }, " \u2194 ")); d.appendChild(el("span", { className: "pair-name" }, p[1])); }
+    else d.appendChild(el("span", { className: "pair-single" }, p[0] + " (code=name)"));
+    s2.appendChild(d);
+  });
+  c.appendChild(makeStep(2, "Code/Name Pairs", "var(--accent2)", r.pairs.filter(function(p) { return p[1]; }).length + " pairs", s2, true));
+
+  var s3 = el("div");
+  s3.appendChild(makeExplain("Now the hierarchy reveals itself. Sort by cardinality \u2014 the column with the most unique values is the leaf (Level 1), the fewest is the root (Level N). Each level rolls up into the next: every leaf entity belongs to exactly one parent at the level above. This many-to-one chain is what makes it a hierarchy. Try editing the CSV to add a column \u2014 the parser will discover the new level automatically."));
+  s3.appendChild(makeTable(["Level", "Type", "Code Col", "Distinct"], r.levels.map(function(lv) {
+    var tag = el("span", { className: "level-tag" }); tag.style.background = levelColor(lv.level - 1); tag.style.color = "#000"; tag.textContent = String(lv.level);
+    return [tag, safeText(lv.typeName), safeText(lv.codeCol), safeText(String(lv.distinctCount))];
+  })));
+  c.appendChild(makeStep(3, "Level Assignment", "var(--accent3)", r.levels.length + " levels", s3, true));
+
+  var s4 = el("div");
+  var fc = r.nodeTable.filter(function(n) { return n.origin === "fill-down"; }).length;
+  s4.appendChild(makeExplain("This is the core output \u2014 a single vertical table where every entity lives with its parent reference. The key innovation is fill-down: higher-level entities (like \"Total Traders\") are replicated at every level below them. Why? So that something can be assigned directly to \"Total Traders\" at the leaf level without needing a fake intermediate portfolio or trading group. Rows marked FILL are these replicas. Rows where the parent equals the code (self) are root nodes. When intermediate levels are NULL, the entity is assigned to its nearest known ancestor \u2014 this is the terminal load."));
+  s4.appendChild(el("div", { className: "row-count" }, (r.nodeTable.length - fc) + " natural + " + fc + " fill-down = " + r.nodeTable.length + " total"));
+  s4.appendChild(makeNodeTableScroll(r.nodeTable));
+  c.appendChild(makeStep(4, "Node Table", "#f48fb1", r.nodeTable.length + " rows (" + fc + " fill-down)", s4, true));
+
+  var s5 = el("div");
+  s5.appendChild(makeExplain("Proof that the vertical table is correct: reconstruct the original flat rows by walking up the parent chain from each leaf. If the pivot matches the input (with fill-down rows added), the parse is validated. This is the reconciliation step \u2014 you can compare this output against the source data to confirm nothing was lost or misassigned."));
+  var scr2 = el("div", { className: "scroll-table" });
+  scr2.appendChild(makeTable(r.levelTypes, r.pivotRows.map(function(row) { return r.levelTypes.map(function(t) { return safeText(row[t]); }); })));
+  s5.appendChild(scr2);
+  c.appendChild(makeStep(5, "Pivot (Bottom-Up)", "#80deea", r.pivotRows.length + " rows", s5, true));
+
+  return c;
+}
+
+// ===================================================================
+// Render multi-domain
+// ===================================================================
+function renderMulti(r) {
+  var c = document.createDocumentFragment();
+
+  var s1 = el("div");
+  s1.appendChild(makeExplain("A single source file often contains multiple independent hierarchies. A bank account has an agreement type chain (what kind of contract), a broker hierarchy (who holds it), a fund (which investment vehicle), and more. These are separate domains \u2014 they don't roll up into each other. The first step is sorting the 38 columns into their domains using column name keywords. Once separated, each domain is just the same single-domain pipeline you saw with cost centers."));
+  Object.keys(r.domainMap).forEach(function(name) {
+    var cols = r.domainMap[name];
+    if (!cols.length) return;
+    var sec = el("div", { className: "domain-section" });
+    var title = el("div", { className: "domain-section-title" });
+    var tag = el("span", { className: "domain-tag" }); tag.style.background = DOMAIN_COLORS[name] || "#555"; tag.style.color = "#000"; tag.textContent = name;
+    title.appendChild(tag); sec.appendChild(title);
+    sec.appendChild(el("div", { className: "domain-col-list" }, cols.join(", ")));
+    s1.appendChild(sec);
+  });
+  c.appendChild(makeStep(1, "Domain Classification", "var(--accent4)", Object.keys(r.domainResults).length + " hierarchy domains", s1, true));
+
+  // Per-domain explanations
+  var DOMAIN_EXPLAINS = {
+    agreement_type: "The agreement type chain is the self-referencing hierarchy \u2014 it rolls up FROM the base entity. Each account has an agreement, which has a type (ISDA, FOA, PBA...), which belongs to a category (Prime Brokerage, Futures and Options...), which is classified as Base Class or Sub-Agreement. This is the same pattern as cost centers: cardinality decreases at each level, and every child maps to exactly one parent. The fill-down entries (marked FILL) let an account be assigned directly to \"Base Class\" when intermediate levels are unknown.",
+    custodian: "The custodian/broker hierarchy is a reference dimension \u2014 a foreign key on the base entity pointing to a separate domain. Each account is held at a branch (specific office), which belongs to a broker (the firm), which rolls up to an ultimate parent (the corporate group). This hierarchy is orthogonal to the agreement chain: Citigroup's broker hierarchy has nothing to do with whether an agreement is ISDA or FOA.",
+    fund: "The fund domain tracks which legal entity/investment vehicle the account belongs to. Currently shallow (1-2 levels), but fund hierarchies typically grow to ~5 levels as the organization matures. The parser will discover new levels automatically when they appear in the data \u2014 no code changes needed.",
+    account_type: "Account type (Street, Exposure, Custody, Settlement) is a flat reference dimension today \u2014 just a lookup. But it follows the same output format as every other domain (type table + node table) because it has the potential to grow into a hierarchy. Uniform format means uniform ingestion logic.",
+    status: "Active vs. Inactive. The simplest possible domain \u2014 2 values, 1 level. Still gets its own type table and node table because every domain follows the same contract."
+  };
+
+  var stepNum = 2;
+  Object.keys(r.domainResults).forEach(function(name) {
+    var dr = r.domainResults[name];
+    var color = DOMAIN_COLORS[name] || "var(--accent)";
+    var body = el("div");
+    if (DOMAIN_EXPLAINS[name]) body.appendChild(makeExplain(DOMAIN_EXPLAINS[name]));
+    if (dr.snowflakes.length) body.appendChild(el("div", { className: "row-count" }, "Snowflake IDs excluded: " + dr.snowflakes.join(", ")));
+    if (dr.levels.length) {
+      body.appendChild(makeTable(["Level", "Type", "Code Col", "Distinct"], dr.levels.map(function(lv) {
+        var tag = el("span", { className: "level-tag" }); tag.style.background = color; tag.style.color = "#000"; tag.textContent = "L" + lv.level;
+        return [tag, safeText(lv.typeName), safeText(lv.codeCol), safeText(String(lv.distinctCount))];
+      })));
+    }
+    var fc = dr.nodeTable.filter(function(n) { return n.origin === "fill-down"; }).length;
+    body.appendChild(el("div", { className: "row-count", style: "margin-top:8px" }, dr.nodeTable.length + " nodes (" + fc + " fill-down)"));
+    body.appendChild(makeNodeTableScroll(dr.nodeTable));
+    c.appendChild(makeStep(stepNum++, name.replace(/_/g, " "), color, dr.levels.length + " levels, " + dr.nodeTable.length + " nodes", body, true));
+  });
+
+  var basBody = el("div");
+  basBody.appendChild(makeExplain("The base entity table ties everything together. Each account row has a foreign key to every domain \u2014 its agreement, its broker branch, its fund, its type, its status. When an account doesn't know its specific agreement (NULL) but does know its class (\"Base Class\"), the FK is resolved to the nearest known ancestor. This is the terminal load: assign to the lowest level the data supports, using the fill-down entries created earlier. The custodian account itself also gets a node table in the standard (code, name, parent, type) format, so it can participate in the same ingestion logic as every other domain."));
+  if (r.resolvedFKs) basBody.appendChild(el("div", { className: "row-count" }, r.resolvedFKs + " NULL FKs resolved via fill-down"));
+  var fkHeaders = ["code"];
+  Object.keys(r.domainResults).forEach(function(n) { fkHeaders.push("fk_" + n); });
+  var scr3 = el("div", { className: "scroll-table" });
+  scr3.appendChild(makeTable(fkHeaders, r.baseRows.map(function(br) { return fkHeaders.map(function(h) { return safeText(br[h]); }); })));
+  basBody.appendChild(scr3);
+  basBody.appendChild(el("div", { className: "row-count", style: "margin-top:10px" }, r.baseNodes.length + " custodian account nodes"));
+  basBody.appendChild(makeNodeTableScroll(r.baseNodes));
+  c.appendChild(makeStep(stepNum++, "Base Entity + Custodian Account", "var(--accent)", r.baseRows.length + " accounts", basBody, true));
+
+  var sumBody = el("div");
+  sumBody.appendChild(makeExplain("Every domain \u2014 from the 4-level agreement chain down to the 1-level status lookup \u2014 produces the same output format: a type table (level definitions) and a node table (entities with parent references). This uniformity is the payoff. One ingestion process, one CRUD screen, one set of validation rules handles all of them. When a domain grows deeper (fund adds 4 more levels, account type gets a parent grouping), only the data changes \u2014 the pipeline and the downstream systems don't."));
+  var st = el("table", { className: "summary-table" });
+  var stHead = el("tr"); ["Domain", "Levels", "Nodes", "Status"].forEach(function(h) { stHead.appendChild(el("th", {}, h)); }); st.appendChild(stHead);
+  var caRow = el("tr");
+  caRow.appendChild(el("td", {}, "custodian_account")); caRow.appendChild(el("td", {}, "1")); caRow.appendChild(el("td", {}, String(r.baseNodes.length))); caRow.appendChild(el("td", { className: "summary-pass" }, "PASS")); st.appendChild(caRow);
+  Object.keys(r.domainResults).forEach(function(name) {
+    var dr = r.domainResults[name]; var tr = el("tr");
+    tr.appendChild(el("td", {}, name)); tr.appendChild(el("td", {}, String(dr.levels.length))); tr.appendChild(el("td", {}, String(dr.nodeTable.length))); tr.appendChild(el("td", { className: "summary-pass" }, "PASS"));
+    st.appendChild(tr);
+  });
+  sumBody.appendChild(st);
+  c.appendChild(makeStep(stepNum, "Summary", "#dce775", (Object.keys(r.domainResults).length + 1) + " domains, all PASS", sumBody, true));
+
+  return c;
+}
+
+// ===================================================================
+// Prompt builder
+// ===================================================================
+function buildPrompt(r) {
+  if (!r) return "Edit the CSV to see the pipeline in action.";
+  if (r.mode === "single") {
+    var parts = ["Parse a " + r.rows.length + "-row flat CSV with " + r.headers.length + " columns into a normalized hierarchy."];
+    parts.push("Cardinality analysis discovers " + r.levels.length + " levels:");
+    r.levels.forEach(function(lv) { parts.push("  L" + lv.level + ": \"" + lv.typeName + "\" (" + lv.distinctCount + " distinct)"); });
+    var fc = r.nodeTable.filter(function(n) { return n.origin === "fill-down"; }).length;
+    parts.push("Node table: " + r.nodeTable.length + " rows (" + fc + " fill-down). Pivot: " + r.pivotRows.length + " rows.");
+    return parts.join("\n");
+  } else {
+    var parts2 = ["Parse a " + r.rows.length + "-row multi-domain CSV (" + r.headers.length + " columns) into per-domain hierarchies."];
+    parts2.push("Domains: " + Object.keys(r.domainResults).join(", "));
+    Object.keys(r.domainResults).forEach(function(name) { var dr = r.domainResults[name]; parts2.push("  " + name + ": " + dr.levels.length + " levels, " + dr.nodeTable.length + " nodes"); });
+    parts2.push("Base entity: " + r.baseRows.length + " accounts. " + r.resolvedFKs + " NULL FKs resolved via fill-down.");
+    return parts2.join("\n");
+  }
+}
+
+// ===================================================================
+// Flowchart renderer
+// ===================================================================
+
+function fcBox(text, color) {
+  var box = el("div", { className: "fc-step-box" }); box.textContent = text;
+  if (color) box.style.borderColor = color;
+  return box;
+}
+
+function fcArrow() { return el("div", { className: "fc-arrow" }, "\u2192"); }
+
+function fcLevelLabel(level, color) {
+  var lbl = el("span", { className: "fc-level-label" });
+  lbl.style.background = color || "var(--accent)"; lbl.style.color = "#000";
+  lbl.textContent = "L" + level;
+  return lbl;
+}
+
+function renderTreeLevel(nodeTable, levels, parentCode, currentLevelIdx, maxDepth) {
+  if (currentLevelIdx >= levels.length || maxDepth <= 0) return null;
+  var lv = levels[currentLevelIdx];
+  var children = nodeTable.filter(function(n) {
+    return n.type === lv.typeName && n.origin === "natural" && n.parent === parentCode;
+  });
+  if (!children.length) return null;
+
+  var container = el("div", { className: "fc-indent" });
+  children.forEach(function(child) {
+    var nodeDiv = el("div", { className: "fc-node" });
+    nodeDiv.appendChild(fcLevelLabel(lv.level, levelColor(lv.level - 1)));
+    var box = el("div", { className: "fc-node-box" });
+    if (child.code === child.parent) box.className += " root";
+    else if (lv.level === 1) box.className += " leaf";
+    box.textContent = child.code;
+    if (child.name && child.name !== child.code) {
+      var nameSpan = el("span", { style: "color:var(--text-dim);font-size:10px;margin-left:6px" });
+      nameSpan.textContent = child.name;
+      box.appendChild(nameSpan);
+    }
+    nodeDiv.appendChild(box);
+    container.appendChild(nodeDiv);
+
+    var subtree = renderTreeLevel(nodeTable, levels, child.code, currentLevelIdx + 1, maxDepth - 1);
+    if (subtree) container.appendChild(subtree);
+  });
+  return container;
+}
+
+function renderSingleFlowchart(r) {
+  var c = el("div", { className: "flowchart" });
+
+  // Pipeline flow
+  var sec1 = el("div", { className: "fc-section" });
+  sec1.appendChild(el("div", { className: "fc-section-title" }, "Pipeline Flow"));
+  var flow = el("div", { className: "fc-pipeline" });
+  var steps = ["Flat CSV", "Cardinality", "Pair Detection", "Level Assignment", "Node Table", "Pivot"];
+  var colors = ["var(--text-dim)", "var(--accent)", "var(--accent2)", "var(--accent3)", "#f48fb1", "#80deea"];
+  steps.forEach(function(s, i) {
+    if (i > 0) flow.appendChild(fcArrow());
+    flow.appendChild(fcBox(s, colors[i]));
+  });
+  sec1.appendChild(flow);
+  c.appendChild(sec1);
+
+  // Hierarchy tree
+  var sec2 = el("div", { className: "fc-section" });
+  sec2.appendChild(el("div", { className: "fc-section-title" }, "Discovered Hierarchy (" + r.levels.length + " levels)"));
+  sec2.appendChild(el("div", { style: "font-size:10px;color:var(--text-dim);margin-bottom:10px" },
+    "Solid border = natural entity. Dashed border = fill-down. Orange border = root (parent=self). Blue border = leaf."));
+
+  // Render from root down
+  var revLevels = r.levels.slice().reverse(); // root first
+  var rootLevel = revLevels[0];
+  var roots = r.nodeTable.filter(function(n) { return n.type === rootLevel.typeName && n.origin === "natural"; });
+
+  roots.forEach(function(root) {
+    var nodeDiv = el("div", { className: "fc-node" });
+    nodeDiv.appendChild(fcLevelLabel(rootLevel.level, levelColor(rootLevel.level - 1)));
+    var box = el("div", { className: "fc-node-box root" });
+    box.textContent = root.code;
+    if (root.name && root.name !== root.code) {
+      var ns = el("span", { style: "color:var(--text-dim);font-size:10px;margin-left:6px" });
+      ns.textContent = root.name; box.appendChild(ns);
+    }
+    nodeDiv.appendChild(box);
+    sec2.appendChild(nodeDiv);
+
+    // Build children levels (root to leaf order)
+    var childLevels = revLevels.slice(1);
+    var subtree = renderTreeLevel(r.nodeTable, childLevels, root.code, 0, 3);
+    if (subtree) sec2.appendChild(subtree);
+  });
+
+  // Fill-down explanation
+  var fillNodes = r.nodeTable.filter(function(n) { return n.origin === "fill-down"; });
+  if (fillNodes.length) {
+    var sec3 = el("div", { className: "fc-section" });
+    sec3.appendChild(el("div", { className: "fc-section-title" }, "Fill-Down Entries (" + fillNodes.length + " replicas)"));
+    sec3.appendChild(el("div", { style: "font-size:11px;color:var(--text-dim);margin-bottom:8px" },
+      "Each higher-level entity appears at every level below it, enabling direct assignment without fake intermediates."));
+    var groups = {};
+    fillNodes.forEach(function(n) { if (!groups[n.code]) groups[n.code] = []; groups[n.code].push(n.type); });
+    Object.keys(groups).forEach(function(code) {
+      var line = el("div", { className: "fc-fk-line" });
+      var box = el("div", { className: "fc-node-box fill" }); box.textContent = code; line.appendChild(box);
+      line.appendChild(el("span", { className: "fc-fk-arrow" }, "\u2192"));
+      line.appendChild(el("span", {}, "appears at: " + groups[code].join(", ")));
+      sec3.appendChild(line);
+    });
+    c.appendChild(sec3);
+  }
+
+  c.appendChild(sec2);
+  return c;
+}
+
+function renderMultiFlowchart(r) {
+  var c = el("div", { className: "flowchart" });
+
+  // Pipeline flow
+  var sec1 = el("div", { className: "fc-section" });
+  sec1.appendChild(el("div", { className: "fc-section-title" }, "Pipeline Flow"));
+  var flow = el("div", { className: "fc-pipeline" });
+  var steps = ["Flat CSV\n(38 cols)", "Domain\nClassification", "Per-Domain\nParse", "Node Tables\n+ Fill-Down", "Base Entity\n+ FK Resolution"];
+  var colors = ["var(--text-dim)", "var(--accent4)", "var(--accent2)", "#f48fb1", "var(--accent)"];
+  steps.forEach(function(s, i) {
+    if (i > 0) flow.appendChild(fcArrow());
+    var box = fcBox("", colors[i]); box.style.whiteSpace = "pre-line"; box.textContent = s;
+    flow.appendChild(box);
+  });
+  sec1.appendChild(flow);
+  c.appendChild(sec1);
+
+  // Domain relationship diagram
+  var sec2 = el("div", { className: "fc-section" });
+  sec2.appendChild(el("div", { className: "fc-section-title" }, "Domain Relationships"));
+  sec2.appendChild(el("div", { style: "font-size:11px;color:var(--text-dim);margin-bottom:12px" },
+    "The base entity (custodian account) has foreign keys to each independent domain. Each domain has its own hierarchy. Domains are orthogonal \u2014 the broker hierarchy has nothing to do with the agreement chain."));
+
+  // Base entity in center with FK arrows to each domain
+  var baseBox = el("div", { className: "fc-domain-block" });
+  baseBox.style.borderColor = "var(--accent)";
+  var baseTitle = el("div", { className: "fc-domain-title" });
+  var baseTag = el("span", { className: "domain-tag" }); baseTag.style.background = DOMAIN_COLORS.base_entity; baseTag.style.color = "#000"; baseTag.textContent = "custodian_account";
+  baseTitle.appendChild(baseTag);
+  baseTitle.appendChild(el("span", { style: "color:var(--text-dim);font-size:10px" }, "base entity \u2014 1 row per account"));
+  baseBox.appendChild(baseTitle);
+
+  Object.keys(r.domainResults).forEach(function(name) {
+    var dr = r.domainResults[name];
+    var fkLine = el("div", { className: "fc-fk-line" });
+    fkLine.appendChild(el("span", { className: "fc-fk-arrow" }, "FK \u2192"));
+    var domTag = el("span", { className: "domain-tag" }); domTag.style.background = DOMAIN_COLORS[name] || "#555"; domTag.style.color = "#000"; domTag.textContent = name;
+    fkLine.appendChild(domTag);
+    var info = dr.levels.length + " level" + (dr.levels.length === 1 ? "" : "s");
+    if (dr.levels.length) info += " (" + dr.levels.map(function(lv) { return lv.typeName; }).join(" \u2192 ") + ")";
+    fkLine.appendChild(el("span", {}, info));
+    baseBox.appendChild(fkLine);
+  });
+  sec2.appendChild(baseBox);
+  c.appendChild(sec2);
+
+  // Per-domain hierarchy trees
+  Object.keys(r.domainResults).forEach(function(name) {
+    var dr = r.domainResults[name];
+    if (!dr.levels.length) return;
+    var color = DOMAIN_COLORS[name] || "var(--accent)";
+
+    var sec = el("div", { className: "fc-section" });
+    var titleEl = el("div", { className: "fc-section-title" });
+    var domTag = el("span", { className: "domain-tag" }); domTag.style.background = color; domTag.style.color = "#000"; domTag.textContent = name;
+    titleEl.appendChild(domTag);
+    titleEl.appendChild(textNode(" Hierarchy (" + dr.levels.length + " levels)"));
+    sec.appendChild(titleEl);
+
+    if (dr.levels.length === 1) {
+      // Flat domain - just list the nodes
+      var flatNodes = dr.nodeTable.filter(function(n) { return n.origin === "natural"; });
+      var row = el("div", { style: "display:flex;gap:6px;flex-wrap:wrap" });
+      flatNodes.forEach(function(n) {
+        var box = el("div", { className: "fc-node-box" }); box.style.borderColor = color; box.textContent = n.code;
+        row.appendChild(box);
+      });
+      sec.appendChild(row);
+    } else {
+      // Multi-level - render tree
+      var revLevels = dr.levels.slice().reverse();
+      var rootLv = revLevels[0];
+      var roots = dr.nodeTable.filter(function(n) { return n.type === rootLv.typeName && n.origin === "natural"; });
+      roots.forEach(function(root) {
+        var nodeDiv = el("div", { className: "fc-node" });
+        nodeDiv.appendChild(fcLevelLabel(rootLv.level, color));
+        var box = el("div", { className: "fc-node-box root" }); box.style.borderColor = color; box.textContent = root.code;
+        if (root.name && root.name !== root.code) {
+          var ns = el("span", { style: "color:var(--text-dim);font-size:10px;margin-left:6px" }); ns.textContent = root.name; box.appendChild(ns);
+        }
+        nodeDiv.appendChild(box);
+        sec.appendChild(nodeDiv);
+
+        var childLevels = revLevels.slice(1);
+        var subtree = renderTreeLevel(dr.nodeTable, childLevels, root.code, 0, 2);
+        if (subtree) sec.appendChild(subtree);
+      });
+    }
+    c.appendChild(sec);
+  });
+
+  // FK resolution
+  if (r.resolvedFKs) {
+    var sec4 = el("div", { className: "fc-section" });
+    sec4.appendChild(el("div", { className: "fc-section-title" }, "NULL FK Resolution (Terminal Load)"));
+    sec4.appendChild(el("div", { style: "font-size:11px;color:var(--text-dim);margin-bottom:8px" },
+      r.resolvedFKs + " accounts had NULL at the leaf level. Each was assigned to the lowest level it does know, using the fill-down entry as the target."));
+    r.baseRows.forEach(function(br) {
+      if (!br.fk_agreement_type) return;
+      // Show resolved ones (where fk doesn't look like a leaf code)
+      var isResolved = br.fk_agreement_type === "Base Class" || br.fk_agreement_type === "Sub-Agreement";
+      if (!isResolved) return;
+      var line = el("div", { className: "fc-fk-line" });
+      line.appendChild(el("span", {}, br.code));
+      line.appendChild(el("span", { className: "fc-fk-arrow" }, "\u2192"));
+      line.appendChild(el("span", { style: "color:var(--accent3)" }, br.fk_agreement_type));
+      line.appendChild(el("span", { style: "color:var(--text-dim)" }, "(agreement_class, via fill-down)"));
+      sec4.appendChild(line);
+    });
+    c.appendChild(sec4);
+  }
+
+  return c;
+}
+
+// ===================================================================
+// Main
+// ===================================================================
+var state = { csv: "", preset: "Cost Centers", error: null, result: null };
+
+function updateAll() {
+  state.error = null; state.result = null;
+  try {
+    var parsed = parseCSV(state.csv);
+    var mode = detectMode(parsed.headers);
+    state.result = mode === "multi" ? runMultiDomain(state.csv) : runSingleDomain(state.csv);
+  } catch (e) { state.error = e.message; }
+
+  // Pipeline tab
+  var pipeline = document.getElementById("pipeline");
+  pipeline.textContent = "";
+  if (state.error) {
+    pipeline.appendChild(el("div", { className: "error-msg" }, state.error));
+  } else {
+    var titleDiv = el("div", { style: "margin-bottom:16px" });
+    titleDiv.appendChild(el("span", { style: "font-size:14px;font-weight:700" }, "Pipeline Output"));
+    var badge = el("span", { className: "mode-badge " + (state.result.mode === "multi" ? "mode-multi" : "mode-single") });
+    badge.textContent = state.result.mode === "multi" ? "MULTI-DOMAIN" : "SINGLE-DOMAIN";
+    titleDiv.appendChild(badge);
+    pipeline.appendChild(titleDiv);
+    pipeline.appendChild(state.result.mode === "multi" ? renderMulti(state.result) : renderSingle(state.result));
+  }
+
+  // Flowchart tab
+  var flowchart = document.getElementById("flowchart");
+  flowchart.textContent = "";
+  if (!state.error && state.result) {
+    flowchart.appendChild(state.result.mode === "multi" ? renderMultiFlowchart(state.result) : renderSingleFlowchart(state.result));
+  }
+
+  document.getElementById("prompt-text").textContent = buildPrompt(state.result);
+}
+
+function setPreset(name) {
+  state.preset = name; state.csv = PRESETS[name];
+  document.getElementById("csv-input").value = state.csv;
+  document.querySelectorAll(".preset-btn").forEach(function(b) { b.classList.toggle("active", b.textContent === name); });
+  updateAll();
+}
+
+function init() {
+  // Tab switching
+  document.querySelectorAll(".tab-btn").forEach(function(btn) {
+    btn.addEventListener("click", function() {
+      var tab = btn.getAttribute("data-tab");
+      document.querySelectorAll(".tab-btn").forEach(function(b) { b.classList.toggle("active", b.getAttribute("data-tab") === tab); });
+      document.querySelectorAll(".tab-content").forEach(function(c) { c.classList.toggle("active", c.getAttribute("data-tab") === tab); });
+    });
+  });
+
+  var presetRow = document.getElementById("presets");
+  Object.keys(PRESETS).forEach(function(name) {
+    presetRow.appendChild(el("button", { className: "preset-btn", onClick: function() { setPreset(name); } }, name));
+  });
+  document.getElementById("csv-input").addEventListener("input", function(e) {
+    state.csv = e.target.value; state.preset = null;
+    document.querySelectorAll(".preset-btn").forEach(function(b) { b.classList.remove("active"); });
+    updateAll();
+  });
+  document.getElementById("copy-btn").addEventListener("click", function() {
+    navigator.clipboard.writeText(document.getElementById("prompt-text").textContent);
+    var btn = document.getElementById("copy-btn"); btn.textContent = "Copied!";
+    setTimeout(function() { btn.textContent = "Copy"; }, 1500);
+  });
+  setPreset(state.preset);
+}
+init();
+</script>
+</body>
+</html>
