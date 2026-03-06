@@ -1,0 +1,44 @@
+{
+  "sources": [
+    {
+      "repo": "Intellilake-Platform/platform",
+      "branch": "main",
+      "files": [
+        {
+          "src": "docs/intellilake-platform-overview.html",
+          "dest": "platform-overview.html",
+          "title": "Platform Architecture & Dev Process",
+          "description": "Interactive overview of the Intellilake platform: architecture decisions, monorepo structure, Git & Linear workflow, tenant configuration flow (with SaaS/Dedicated toggle), CI/CD pipeline, and sprint cycles. 6 tabbed panels with clickable diagrams and detailed callouts.",
+          "icon": "\ud83c\udfd7\ufe0f",
+          "icon_color": "accent",
+          "tags": [
+            { "label": "Architecture", "color": "accent" },
+            { "label": "Config Flow", "color": "green" },
+            { "label": "Multi-Tenant", "color": "amber" },
+            { "label": "CI/CD", "color": "blue" },
+            { "label": "ADRs", "color": "purple" }
+          ]
+        }
+      ]
+    },
+    {
+      "repo": "Intellilake-Platform/scratch",
+      "branch": "main",
+      "files": [
+        {
+          "src": "py/docs/playground_hierarchy_parser.html",
+          "dest": "hierarchy-playground.html",
+          "title": "Hierarchy Parser Pipeline",
+          "description": "Interactive explorer for the hierarchy parser pipeline: configure dimensions, custodians, and parsing strategies. Visualize how raw fund/entity data flows through normalization, hierarchy building, and output stages.",
+          "icon": "\ud83c\udf33",
+          "icon_color": "cyan",
+          "tags": [
+            { "label": "Data Pipeline", "color": "cyan" },
+            { "label": "Parser", "color": "green" },
+            { "label": "Hierarchy", "color": "amber" }
+          ]
+        }
+      ]
+    }
+  ]
+}

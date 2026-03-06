@@ -697,94 +697,6 @@
     font-size: 12px;
   }
 
-  /* ── SUBTABS ── */
-  .subtabs {
-    display: flex;
-    gap: 0;
-    margin-bottom: 20px;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    overflow: hidden;
-    width: fit-content;
-  }
-  .subtab {
-    padding: 9px 20px;
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--text-dim);
-    cursor: pointer;
-    background: var(--surface);
-    border-right: 1px solid var(--border);
-    transition: all 0.15s;
-    user-select: none;
-  }
-  .subtab:last-child { border-right: none; }
-  .subtab:hover { color: var(--text); background: var(--surface2); }
-  .subtab.active { color: var(--accent); background: rgba(99,102,241,0.08); }
-  .subtab-content { display: none; }
-  .subtab-content.active { display: block; }
-
-  /* ── FLOWCHART ── */
-  .flow-legend {
-    display: flex;
-    gap: 18px;
-    flex-wrap: wrap;
-    margin-bottom: 20px;
-    padding: 12px 16px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    font-size: 11px;
-    color: var(--text-dim);
-  }
-  .flow-legend-item { display: flex; align-items: center; gap: 6px; }
-  .flow-legend-line { width: 20px; height: 3px; border-radius: 2px; flex-shrink: 0; }
-  .flow-legend-dash { width: 20px; height: 0; border-top: 2px dashed; flex-shrink: 0; }
-  .flow-legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-  .flow-svg-wrap { width: 100%; overflow-x: auto; }
-  .flow-svg-wrap svg { display: block; width: 100%; height: auto; }
-  .flow-node { cursor: pointer; }
-  .flow-tip {
-    display: none;
-    position: fixed;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 14px 18px;
-    font-size: 12px;
-    line-height: 1.6;
-    color: var(--text-dim);
-    max-width: 340px;
-    z-index: 100;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-    pointer-events: none;
-  }
-  .flow-tip.visible { display: block; }
-  .flow-tip-title { font-weight: 600; color: var(--text); margin-bottom: 6px; font-size: 13px; }
-
-  .flow-annotations {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-    margin-top: 24px;
-  }
-  @media (max-width: 800px) { .flow-annotations { grid-template-columns: 1fr; } }
-  .flow-ann {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 14px 16px;
-  }
-  .flow-ann:hover { border-color: var(--text-muted); }
-  .flow-ann h4 { font-size: 12px; font-weight: 600; margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
-  .flow-ann p { font-size: 11px; color: var(--text-dim); line-height: 1.6; }
-  .flow-ann code { font-size: 10px; background: var(--bg); padding: 1px 5px; border-radius: 3px; color: var(--accent); }
-  .flow-ann-num {
-    width: 20px; height: 20px; border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 10px; font-weight: 700; flex-shrink: 0; color: white;
-  }
-
   /* Decision cards */
   .decision-card {
     background: var(--surface);
@@ -1250,389 +1162,73 @@
 <!-- ═══════════════════════════════════════ -->
 <div class="panel" id="panel-tenant">
   <div class="section-title">Multi-Tenant Configuration</div>
-  <div class="section-desc">Two config sources merge at startup. Explore the config split details or trace the full configuration flow from source to runtime.</div>
+  <div class="section-desc">Two config sources merge at startup. Select a tenant to see what lives where and how changes flow from a dev's branch to production.</div>
 
-  <div class="subtabs" id="tenant-subtabs">
-    <div class="subtab active" data-subtab="config-split" onclick="selectTenantSubtab('config-split')">Config Split</div>
-    <div class="subtab" data-subtab="config-flow" onclick="selectTenantSubtab('config-flow')">Configuration Flow</div>
-  </div>
-
-  <!-- ── SUBTAB: Config Split (existing content) ── -->
-  <div class="subtab-content active" id="subtab-config-split">
-    <div class="monorepo-intro" style="margin-bottom:20px">
-      <strong>The Config Split — why two sources?</strong> Financial clients require that credentials never appear in source control. But feature flags and branding need PR review and staging validation before they reach production. So config is split by concern: non-secret config lives in the repo (reviewable, testable), secrets live in AWS Secrets Manager (secure, auditable). At container startup, the app merges both into a single runtime config object.
-      <div class="monorepo-layers" style="margin-top:12px">
-        <div class="layer-card" style="border-left:3px solid var(--green)">
-          <div class="layer-card-title" style="color:var(--green)">Repo JSON — Developer Managed</div>
-          <strong>What:</strong> Feature flags, branding (logo, colors, theme), UI layout, nav items, auth provider choice, Snowflake account ID (not password).<br>
-          <strong>Where:</strong> <code style="color:var(--accent);font-size:11px">contracts/tenant-configs/millennium.json</code><br>
-          <strong>Changed by:</strong> Developer edits file on feature branch → PR review → CI validates against schema → merge to staging → tested → promoted to main.<br>
-          <strong>Why here:</strong> These are not sensitive. They need review, version history, and testing before reaching clients.
-        </div>
-        <div class="layer-card" style="border-left:3px solid var(--amber)">
-          <div class="layer-card-title" style="color:var(--amber)">AWS Secrets Manager — Ops Managed</div>
-          <strong>What:</strong> Snowflake password, database connection strings, API keys, auth provider secrets, cache connection strings.<br>
-          <strong>Where:</strong> AWS Secrets Manager, one secret per client per environment (dev/staging/prod).<br>
-          <strong>Changed by:</strong> Tech lead or DevOps via AWS console/CLI. IAM role per container restricts access to only that client's secret.<br>
-          <strong>Why here:</strong> These are sensitive credentials. Never in source control. AWS provides rotation, audit trail, and encryption at rest.
-        </div>
-        <div class="layer-card" style="border-left:3px solid var(--accent)">
-          <div class="layer-card-title" style="color:var(--accent)">Runtime Merge — At Container Startup</div>
-          <strong>Step 1:</strong> Container starts, reads <code style="color:var(--green);font-size:11px">contracts/tenant-configs/{client}.json</code> from disk (baked into image).<br>
-          <strong>Step 2:</strong> Fetches secret from AWS Secrets Manager via IAM role.<br>
-          <strong>Step 3:</strong> Merges both into a single config object. App code reads from this merged object — never from either source directly.<br>
-          <strong>Result:</strong> <code style="font-size:11px;color:var(--text-dim)">config.features.bulk_export</code> comes from repo JSON. <code style="font-size:11px;color:var(--text-dim)">config.snowflake.password</code> comes from Secrets Manager. App doesn't know or care which source.
-        </div>
+  <!-- Config split explainer -->
+  <div class="monorepo-intro" style="margin-bottom:20px">
+    <strong>The Config Split — why two sources?</strong> Financial clients require that credentials never appear in source control. But feature flags and branding need PR review and staging validation before they reach production. So config is split by concern: non-secret config lives in the repo (reviewable, testable), secrets live in AWS Secrets Manager (secure, auditable). At container startup, the app merges both into a single runtime config object.
+    <div class="monorepo-layers" style="margin-top:12px">
+      <div class="layer-card" style="border-left:3px solid var(--green)">
+        <div class="layer-card-title" style="color:var(--green)">Repo JSON — Developer Managed</div>
+        <strong>What:</strong> Feature flags, branding (logo, colors, theme), UI layout, nav items, auth provider choice, Snowflake account ID (not password).<br>
+        <strong>Where:</strong> <code style="color:var(--accent);font-size:11px">contracts/tenant-configs/millennium.json</code><br>
+        <strong>Changed by:</strong> Developer edits file on feature branch → PR review → CI validates against schema → merge to staging → tested → promoted to main.<br>
+        <strong>Why here:</strong> These are not sensitive. They need review, version history, and testing before reaching clients.
       </div>
-    </div>
-
-    <div class="tenant-switch" id="tenant-switch" style="margin-bottom:16px">
-      <div class="tenant-btn active" data-tenant="millennium" onclick="selectTenant('millennium')">Millennium (MLP)</div>
-      <div class="tenant-btn" data-tenant="kkr" onclick="selectTenant('kkr')">KKR</div>
-      <div class="tenant-btn" data-tenant="future" onclick="selectTenant('future')">Future Client</div>
-    </div>
-
-    <div class="tenant-grid">
-      <div class="card">
-        <h3 style="color:var(--green)">Repo JSON — PR Reviewable</h3>
-        <div class="config-json" id="tenant-json"></div>
+      <div class="layer-card" style="border-left:3px solid var(--amber)">
+        <div class="layer-card-title" style="color:var(--amber)">AWS Secrets Manager — Ops Managed</div>
+        <strong>What:</strong> Snowflake password, database connection strings, API keys, auth provider secrets, cache connection strings.<br>
+        <strong>Where:</strong> AWS Secrets Manager, one secret per client per environment (dev/staging/prod).<br>
+        <strong>Changed by:</strong> Tech lead or DevOps via AWS console/CLI. IAM role per container restricts access to only that client's secret.<br>
+        <strong>Why here:</strong> These are sensitive credentials. Never in source control. AWS provides rotation, audit trail, and encryption at rest.
       </div>
-      <div class="card">
-        <h3 style="color:var(--amber)">AWS Secrets Manager — Secure</h3>
-        <div class="config-json" id="secrets-json"></div>
-      </div>
-    </div>
-
-    <div class="card" style="margin-top:16px">
-      <h3>How a Developer Changes Config</h3>
-      <div id="config-workflow"></div>
-    </div>
-
-    <div class="tenant-grid" style="margin-top:16px">
-      <div class="card">
-        <h3>Deployment Model</h3>
-        <div class="deploy-model" id="deploy-model">
-          <div class="deploy-btn active" data-model="saas" onclick="selectDeploy('saas')">Multi-tenant SaaS</div>
-          <div class="deploy-btn" data-model="dedicated" onclick="selectDeploy('dedicated')">Dedicated Instance</div>
-        </div>
-        <div class="deploy-detail" id="deploy-detail"></div>
-      </div>
-      <div class="card">
-        <h3>Architecture Flow</h3>
-        <div class="arch-diagram" id="arch-diagram"></div>
+      <div class="layer-card" style="border-left:3px solid var(--accent)">
+        <div class="layer-card-title" style="color:var(--accent)">Runtime Merge — At Container Startup</div>
+        <strong>Step 1:</strong> Container starts, reads <code style="color:var(--green);font-size:11px">contracts/tenant-configs/{client}.json</code> from disk (baked into image).<br>
+        <strong>Step 2:</strong> Fetches secret from AWS Secrets Manager via IAM role.<br>
+        <strong>Step 3:</strong> Merges both into a single config object. App code reads from this merged object — never from either source directly.<br>
+        <strong>Result:</strong> <code style="font-size:11px;color:var(--text-dim)">config.features.bulk_export</code> comes from repo JSON. <code style="font-size:11px;color:var(--text-dim)">config.snowflake.password</code> comes from Secrets Manager. App doesn't know or care which source.
       </div>
     </div>
   </div>
 
-  <!-- ── SUBTAB: Configuration Flow (new flowchart) ── -->
-  <div class="subtab-content" id="subtab-config-flow">
-    <div class="section-desc" style="margin-bottom:16px">Traces how repo JSON and AWS secrets converge at container startup and flow through the application. Hover any node for details. Numbered callouts explained below.</div>
+  <!-- Tenant selector + config views -->
+  <div class="tenant-switch" id="tenant-switch" style="margin-bottom:16px">
+    <div class="tenant-btn active" data-tenant="millennium" onclick="selectTenant('millennium')">Millennium (MLP)</div>
+    <div class="tenant-btn" data-tenant="kkr" onclick="selectTenant('kkr')">KKR</div>
+    <div class="tenant-btn" data-tenant="future" onclick="selectTenant('future')">Future Client</div>
+  </div>
 
-    <!-- Deploy mode toggle -->
-    <div class="deploy-model" id="flow-deploy-mode" style="margin-bottom:16px">
-      <div class="deploy-btn active" data-fmode="saas" onclick="selectFlowMode('saas')">SaaS (Intellilake-managed)</div>
-      <div class="deploy-btn" data-fmode="dedicated" onclick="selectFlowMode('dedicated')">Dedicated Instance (Client-managed)</div>
+  <div class="tenant-grid">
+    <div class="card">
+      <h3 style="color:var(--green)">Repo JSON — PR Reviewable</h3>
+      <div class="config-json" id="tenant-json"></div>
     </div>
-    <div id="flow-mode-context" class="monorepo-intro" style="margin-bottom:16px"></div>
-
-    <div class="flow-legend">
-      <div class="flow-legend-item"><div class="flow-legend-line" style="background:var(--green)"></div> Repo JSON (PR-reviewed)</div>
-      <div class="flow-legend-item"><div class="flow-legend-line" style="background:var(--amber)"></div> AWS Secrets (ops-managed)</div>
-      <div class="flow-legend-item"><div class="flow-legend-line" style="background:var(--accent)"></div> Merged config flow</div>
-      <div class="flow-legend-item"><div class="flow-legend-line" style="background:var(--cyan)"></div> Data queries</div>
-      <div class="flow-legend-item"><div class="flow-legend-dash" style="border-color:var(--text-muted)"></div> Security boundary</div>
-      <div class="flow-legend-item"><div class="flow-legend-dot" style="background:var(--purple)"></div> Merge point</div>
+    <div class="card">
+      <h3 style="color:var(--amber)">AWS Secrets Manager — Secure</h3>
+      <div class="config-json" id="secrets-json"></div>
     </div>
+  </div>
 
-    <div class="flow-svg-wrap">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 1280">
-        <defs>
-          <marker id="a-gn" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#22c55e"/></marker>
-          <marker id="a-am" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#f59e0b"/></marker>
-          <marker id="a-ac" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#6366f1"/></marker>
-          <marker id="a-cy" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#06b6d4"/></marker>
-          <marker id="a-mu" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#5c6078"/></marker>
-          <marker id="a-bl" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#3b82f6"/></marker>
-          <filter id="gl-merge"><feDropShadow dx="0" dy="0" stdDeviation="4" flood-color="#a855f7" flood-opacity="0.45"/></filter>
-        </defs>
+  <!-- Dev workflow for config changes -->
+  <div class="card" style="margin-top:16px">
+    <h3>How a Developer Changes Config</h3>
+    <div id="config-workflow"></div>
+  </div>
 
-        <!-- ── ZONE LABELS ── -->
-        <text x="24" y="26" fill="#5c6078" font-size="10" font-weight="600" letter-spacing="1" font-family="system-ui">CONFIG SOURCES</text>
-        <line x1="168" y1="22" x2="1096" y2="22" stroke="#2a2d38"/>
-        <text x="24" y="296" fill="#5c6078" font-size="10" font-weight="600" letter-spacing="1" font-family="system-ui">BUILD &amp; DEPLOY</text>
-        <line x1="155" y1="292" x2="1096" y2="292" stroke="#2a2d38"/>
-        <text x="24" y="488" fill="#5c6078" font-size="10" font-weight="600" letter-spacing="1" font-family="system-ui">CONTAINER STARTUP</text>
-        <line x1="190" y1="484" x2="1096" y2="484" stroke="#2a2d38"/>
-        <text x="24" y="728" fill="#5c6078" font-size="10" font-weight="600" letter-spacing="1" font-family="system-ui">APPLICATION RUNTIME</text>
-        <line x1="206" y1="724" x2="1096" y2="724" stroke="#2a2d38"/>
-        <text x="24" y="1012" fill="#5c6078" font-size="10" font-weight="600" letter-spacing="1" font-family="system-ui">DATA LAYER</text>
-        <line x1="120" y1="1008" x2="1096" y2="1008" stroke="#2a2d38"/>
-
-        <!-- ════════════════════════════════════════ -->
-        <!-- LEFT: REPO JSON PATH                    -->
-        <!-- ════════════════════════════════════════ -->
-        <g class="flow-node" data-tip="developer">
-          <rect x="40" y="44" width="280" height="52" rx="10" fill="#181a20" stroke="#22c55e" stroke-width="1.5"/>
-          <text x="62" y="68" fill="#22c55e" font-size="13">&#x1F468;&#x200D;&#x1F4BB;</text>
-          <text x="88" y="67" fill="#e2e4ea" font-size="12" font-weight="600" font-family="system-ui">Developer</text>
-          <text x="88" y="84" fill="#8b8fa3" font-size="10" font-family="system-ui">Edits tenant JSON on feature branch</text>
-        </g>
-        <g class="flow-node" data-tip="tenant-json-tip">
-          <rect x="40" y="124" width="280" height="52" rx="10" fill="#181a20" stroke="#22c55e" stroke-width="1.5"/>
-          <text x="62" y="148" fill="#22c55e" font-size="13">&#x1F4C4;</text>
-          <text x="88" y="148" fill="#e2e4ea" font-size="12" font-weight="600" font-family="'SF Mono',monospace">tenant-configs/*.json</text>
-          <text x="88" y="166" fill="#8b8fa3" font-size="10" font-family="system-ui">Feature flags, branding, auth config, data settings</text>
-        </g>
-        <g class="flow-node" data-tip="schema-validate">
-          <rect x="40" y="204" width="280" height="52" rx="10" fill="#181a20" stroke="#22c55e" stroke-width="1.5"/>
-          <text x="62" y="228" fill="#22c55e" font-size="13">&#x2705;</text>
-          <text x="88" y="228" fill="#e2e4ea" font-size="12" font-weight="600" font-family="system-ui">CI &#x2014; Schema Validation</text>
-          <text x="88" y="246" fill="#8b8fa3" font-size="10" font-family="system-ui">tenant.schema.json rejects invalid config</text>
-        </g>
-        <line x1="180" y1="96" x2="180" y2="124" stroke="#22c55e" stroke-width="2" marker-end="url(#a-gn)"/>
-        <line x1="180" y1="176" x2="180" y2="204" stroke="#22c55e" stroke-width="2" marker-end="url(#a-gn)"/>
-
-        <!-- Callout 1 -->
-        <circle cx="336" cy="70" r="10" fill="#6366f1"/><text x="336" y="74" fill="white" font-size="9" font-weight="700" text-anchor="middle" font-family="system-ui">1</text>
-
-        <!-- ════════════════════════════════════════ -->
-        <!-- RIGHT: AWS SECRETS PATH                 -->
-        <!-- ════════════════════════════════════════ -->
-        <g class="flow-node" data-tip="ops">
-          <rect x="800" y="44" width="280" height="52" rx="10" fill="#181a20" stroke="#f59e0b" stroke-width="1.5"/>
-          <text x="822" y="68" fill="#f59e0b" font-size="13">&#x1F6E1;&#xFE0F;</text>
-          <text x="848" y="67" fill="#e2e4ea" font-size="12" font-weight="600" font-family="system-ui">Tech Lead / DevOps</text>
-          <text x="848" y="84" fill="#8b8fa3" font-size="10" font-family="system-ui">Manages credentials via AWS Console / CLI</text>
-        </g>
-        <g class="flow-node" data-tip="secrets-manager">
-          <rect x="800" y="124" width="280" height="52" rx="10" fill="#181a20" stroke="#f59e0b" stroke-width="1.5"/>
-          <text x="822" y="148" fill="#f59e0b" font-size="13">&#x1F510;</text>
-          <text x="848" y="148" fill="#e2e4ea" font-size="12" font-weight="600" font-family="system-ui">AWS Secrets Manager</text>
-          <text x="848" y="166" fill="#8b8fa3" font-size="10" font-family="system-ui">Passwords, API keys, DB connection strings</text>
-        </g>
-        <g class="flow-node" data-tip="iam-role">
-          <rect x="800" y="204" width="280" height="52" rx="10" fill="#181a20" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="6,3"/>
-          <text x="822" y="228" fill="#f59e0b" font-size="13">&#x1F511;</text>
-          <text x="848" y="228" fill="#e2e4ea" font-size="12" font-weight="600" font-family="system-ui">Per-Client IAM Role</text>
-          <text x="848" y="246" fill="#8b8fa3" font-size="10" font-family="system-ui">Scopes container access to one secret only</text>
-        </g>
-        <line x1="940" y1="96" x2="940" y2="124" stroke="#f59e0b" stroke-width="2" marker-end="url(#a-am)"/>
-        <line x1="940" y1="176" x2="940" y2="204" stroke="#f59e0b" stroke-width="2" marker-end="url(#a-am)"/>
-
-        <!-- Callout 2 -->
-        <circle cx="784" cy="70" r="10" fill="#6366f1"/><text x="784" y="74" fill="white" font-size="9" font-weight="700" text-anchor="middle" font-family="system-ui">2</text>
-
-        <!-- ════════════════════════════════════════ -->
-        <!-- BUILD & DEPLOY                          -->
-        <!-- ════════════════════════════════════════ -->
-        <g class="flow-node" data-tip="docker-image">
-          <rect x="40" y="312" width="340" height="52" rx="10" fill="#181a20" stroke="#22c55e" stroke-width="1.5"/>
-          <text x="62" y="336" fill="#22c55e" font-size="13">&#x1F4E6;</text>
-          <text x="88" y="336" fill="#e2e4ea" font-size="12" font-weight="600" font-family="system-ui">Docker Image Build</text>
-          <text x="88" y="354" fill="#8b8fa3" font-size="10" font-family="system-ui">JSON configs baked into image at /app/contracts/</text>
-        </g>
-        <g class="flow-node" data-tip="ecr">
-          <rect x="40" y="392" width="340" height="52" rx="10" fill="#181a20" stroke="#22c55e" stroke-width="1.5"/>
-          <text x="62" y="416" fill="#22c55e" font-size="13">&#x1F4E4;</text>
-          <text x="88" y="416" fill="#e2e4ea" font-size="12" font-weight="600" font-family="system-ui">AWS ECR (Container Registry)</text>
-          <text x="88" y="434" fill="#8b8fa3" font-size="10" font-family="system-ui">Tagged with commit SHA or semver release</text>
-        </g>
-        <line x1="180" y1="256" x2="180" y2="312" stroke="#22c55e" stroke-width="2" marker-end="url(#a-gn)"/>
-        <line x1="210" y1="364" x2="210" y2="392" stroke="#22c55e" stroke-width="2" marker-end="url(#a-gn)"/>
-
-        <!-- Callout 3 -->
-        <circle cx="396" cy="338" r="10" fill="#6366f1"/><text x="396" y="342" fill="white" font-size="9" font-weight="700" text-anchor="middle" font-family="system-ui">3</text>
-
-        <!-- Load Balancer -->
-        <g class="flow-node" data-tip="load-balancer">
-          <rect x="440" y="392" width="300" height="52" rx="10" fill="#181a20" stroke="#5c6078" stroke-width="1.5" stroke-dasharray="6,3"/>
-          <text x="462" y="416" fill="#8b8fa3" font-size="13">&#x2696;&#xFE0F;</text>
-          <text x="488" y="416" fill="#e2e4ea" font-size="12" font-weight="600" font-family="system-ui">Load Balancer (ALB)</text>
-          <text x="488" y="434" fill="#8b8fa3" font-size="10" font-family="system-ui">Routes by client ID &#x2192; correct container</text>
-        </g>
-
-        <!-- ════════════════════════════════════════ -->
-        <!-- CONTAINER STARTUP                       -->
-        <!-- ════════════════════════════════════════ -->
-        <rect x="120" y="504" width="880" height="188" rx="14" fill="none" stroke="#5c6078" stroke-width="1" stroke-dasharray="8,4"/>
-        <text x="140" y="522" fill="#5c6078" font-size="9" font-weight="600" letter-spacing="0.5" font-family="system-ui">ECS FARGATE &#x2014; PER-CLIENT CONTAINER (e.g. millennium-api)</text>
-
-        <!-- Read JSON -->
-        <g class="flow-node" data-tip="read-json">
-          <rect x="150" y="538" width="280" height="48" rx="10" fill="#1e2028" stroke="#22c55e" stroke-width="1.5"/>
-          <text x="172" y="560" fill="#22c55e" font-size="12">&#x1F4C2;</text>
-          <text x="198" y="560" fill="#e2e4ea" font-size="11" font-weight="600" font-family="system-ui">Read JSON from disk</text>
-          <text x="198" y="576" fill="#8b8fa3" font-size="9" font-family="'SF Mono',monospace">/app/contracts/tenant-configs/{id}.json</text>
-        </g>
-
-        <!-- Fetch secrets -->
-        <g class="flow-node" data-tip="fetch-secrets">
-          <rect x="690" y="538" width="280" height="48" rx="10" fill="#1e2028" stroke="#f59e0b" stroke-width="1.5"/>
-          <text x="712" y="560" fill="#f59e0b" font-size="12">&#x1F4E5;</text>
-          <text x="738" y="560" fill="#e2e4ea" font-size="11" font-weight="600" font-family="system-ui">Fetch secret via IAM role</text>
-          <text x="738" y="576" fill="#8b8fa3" font-size="9" font-family="'SF Mono',monospace">intellilake/{tenant_id}/prod</text>
-        </g>
-
-        <!-- MERGE NODE -->
-        <g class="flow-node" data-tip="merge-point">
-          <rect x="370" y="618" width="380" height="54" rx="12" fill="#1e2028" stroke="#a855f7" stroke-width="2.5" filter="url(#gl-merge)"/>
-          <text x="402" y="642" fill="#a855f7" font-size="13">&#x1F500;</text>
-          <text x="430" y="642" fill="#e2e4ea" font-size="12" font-weight="700" font-family="system-ui">MERGE &#x2192; Runtime Config Object</text>
-          <text x="430" y="660" fill="#8b8fa3" font-size="9" font-family="system-ui">Single dict &#x2014; app code reads only from this merged object</text>
-        </g>
-
-        <!-- Arrows into container -->
-        <line x1="210" y1="444" x2="210" y2="504" stroke="#22c55e" stroke-width="2" marker-end="url(#a-gn)"/>
-        <path d="M 210 504 L 210 538" stroke="#22c55e" stroke-width="2" fill="none" marker-end="url(#a-gn)"/>
-        <path d="M 940 256 L 940 504" stroke="#f59e0b" stroke-width="2" fill="none" marker-end="url(#a-am)"/>
-        <line x1="940" y1="504" x2="830" y2="538" stroke="#f59e0b" stroke-width="2" marker-end="url(#a-am)"/>
-
-        <!-- Arrows into merge -->
-        <path d="M 290 586 L 290 626 Q 290 645 310 645 L 370 645" stroke="#22c55e" stroke-width="2" fill="none" marker-end="url(#a-gn)"/>
-        <path d="M 830 586 L 830 626 Q 830 645 810 645 L 750 645" stroke="#f59e0b" stroke-width="2" fill="none" marker-end="url(#a-am)"/>
-
-        <!-- Callout 4 -->
-        <circle cx="560" cy="606" r="10" fill="#a855f7"/><text x="560" y="610" fill="white" font-size="9" font-weight="700" text-anchor="middle" font-family="system-ui">4</text>
-
-        <!-- ════════════════════════════════════════ -->
-        <!-- APPLICATION RUNTIME                     -->
-        <!-- ════════════════════════════════════════ -->
-        <line x1="560" y1="672" x2="560" y2="712" stroke="#6366f1" stroke-width="2"/>
-        <circle cx="560" cy="716" r="4" fill="#6366f1"/>
-
-        <!-- Fan-out to 3 consumers -->
-        <path d="M 560 716 L 180 716 L 180 744" stroke="#6366f1" stroke-width="2" fill="none" marker-end="url(#a-ac)"/>
-        <line x1="560" y1="716" x2="560" y2="744" stroke="#6366f1" stroke-width="2" marker-end="url(#a-ac)"/>
-        <path d="M 560 716 L 930 716 L 930 744" stroke="#6366f1" stroke-width="2" fill="none" marker-end="url(#a-ac)"/>
-
-        <!-- FastAPI -->
-        <g class="flow-node" data-tip="fastapi">
-          <rect x="50" y="744" width="260" height="64" rx="10" fill="#181a20" stroke="#22c55e" stroke-width="1.5"/>
-          <text x="72" y="770" fill="#22c55e" font-size="14">&#x26A1;</text>
-          <text x="98" y="770" fill="#e2e4ea" font-size="12" font-weight="600" font-family="system-ui">FastAPI Backend</text>
-          <text x="98" y="788" fill="#8b8fa3" font-size="10" font-family="system-ui">Features, data routing, DB creds, cache</text>
-        </g>
-
-        <!-- Auth Layer -->
-        <g class="flow-node" data-tip="auth-layer">
-          <rect x="390" y="744" width="340" height="64" rx="10" fill="#181a20" stroke="#6366f1" stroke-width="1.5"/>
-          <text x="412" y="770" fill="#6366f1" font-size="14">&#x1F512;</text>
-          <text x="438" y="770" fill="#e2e4ea" font-size="12" font-weight="600" font-family="system-ui">Auth Abstraction Layer</text>
-          <text x="438" y="788" fill="#8b8fa3" font-size="10" font-family="system-ui">auth.provider, auth.protocol, auth_client_secret</text>
-        </g>
-
-        <!-- Next.js -->
-        <g class="flow-node" data-tip="nextjs">
-          <rect x="810" y="744" width="260" height="64" rx="10" fill="#181a20" stroke="#3b82f6" stroke-width="1.5"/>
-          <text x="832" y="770" fill="#3b82f6" font-size="14">&#x1F310;</text>
-          <text x="858" y="770" fill="#e2e4ea" font-size="12" font-weight="600" font-family="system-ui">Next.js Frontend</text>
-          <text x="858" y="788" fill="#8b8fa3" font-size="10" font-family="system-ui">Branding, theme, features, nav items</text>
-        </g>
-
-        <!-- Callout 5 -->
-        <circle cx="330" cy="776" r="10" fill="#6366f1"/><text x="330" y="780" fill="white" font-size="9" font-weight="700" text-anchor="middle" font-family="system-ui">5</text>
-        <!-- Callout 6 -->
-        <circle cx="790" cy="776" r="10" fill="#6366f1"/><text x="790" y="780" fill="white" font-size="9" font-weight="700" text-anchor="middle" font-family="system-ui">6</text>
-
-        <!-- Auth arrows -->
-        <path d="M 390 776 L 310 776" stroke="#6366f1" stroke-width="1.5" fill="none" marker-end="url(#a-ac)"/>
-        <text x="337" y="769" fill="#5c6078" font-size="8" font-family="system-ui">validates</text>
-        <path d="M 730 776 L 810 776" stroke="#6366f1" stroke-width="1.5" fill="none" marker-end="url(#a-ac)"/>
-        <text x="742" y="769" fill="#5c6078" font-size="8" font-family="system-ui">login flow</text>
-
-        <!-- Config field pills under FastAPI -->
-        <rect x="66" y="824" width="90" height="20" rx="10" fill="rgba(34,197,94,0.12)"/>
-        <text x="111" y="838" fill="#22c55e" font-size="9" text-anchor="middle" font-family="'SF Mono',monospace">features.*</text>
-        <rect x="164" y="824" width="90" height="20" rx="10" fill="rgba(245,158,11,0.12)"/>
-        <text x="209" y="838" fill="#f59e0b" font-size="9" text-anchor="middle" font-family="'SF Mono',monospace">snowflake_*</text>
-        <rect x="66" y="850" width="100" height="20" rx="10" fill="rgba(245,158,11,0.12)"/>
-        <text x="116" y="864" fill="#f59e0b" font-size="9" text-anchor="middle" font-family="'SF Mono',monospace">cache_conn_str</text>
-        <rect x="174" y="850" width="90" height="20" rx="10" fill="rgba(34,197,94,0.12)"/>
-        <text x="219" y="864" fill="#22c55e" font-size="9" text-anchor="middle" font-family="'SF Mono',monospace">cache_ttl</text>
-
-        <!-- Config field pills under Auth -->
-        <rect x="406" y="824" width="100" height="20" rx="10" fill="rgba(34,197,94,0.12)"/>
-        <text x="456" y="838" fill="#22c55e" font-size="9" text-anchor="middle" font-family="'SF Mono',monospace">auth.provider</text>
-        <rect x="514" y="824" width="100" height="20" rx="10" fill="rgba(34,197,94,0.12)"/>
-        <text x="564" y="838" fill="#22c55e" font-size="9" text-anchor="middle" font-family="'SF Mono',monospace">auth.protocol</text>
-        <rect x="406" y="850" width="116" height="20" rx="10" fill="rgba(245,158,11,0.12)"/>
-        <text x="464" y="864" fill="#f59e0b" font-size="9" text-anchor="middle" font-family="'SF Mono',monospace">auth_client_secret</text>
-        <rect x="530" y="850" width="110" height="20" rx="10" fill="rgba(245,158,11,0.12)"/>
-        <text x="585" y="864" fill="#f59e0b" font-size="9" text-anchor="middle" font-family="'SF Mono',monospace">cognito_pool_id</text>
-
-        <!-- Config field pills under Next.js -->
-        <rect x="826" y="824" width="90" height="20" rx="10" fill="rgba(34,197,94,0.12)"/>
-        <text x="871" y="838" fill="#22c55e" font-size="9" text-anchor="middle" font-family="'SF Mono',monospace">branding.*</text>
-        <rect x="924" y="824" width="90" height="20" rx="10" fill="rgba(34,197,94,0.12)"/>
-        <text x="969" y="838" fill="#22c55e" font-size="9" text-anchor="middle" font-family="'SF Mono',monospace">features.*</text>
-        <rect x="826" y="850" width="100" height="20" rx="10" fill="rgba(34,197,94,0.12)"/>
-        <text x="876" y="864" fill="#22c55e" font-size="9" text-anchor="middle" font-family="'SF Mono',monospace">auth.provider</text>
-
-        <!-- Key -->
-        <text x="826" y="894" fill="#5c6078" font-size="8" font-family="system-ui">green = repo JSON &#x2022; amber = AWS Secrets</text>
-
-        <!-- ════════════════════════════════════════ -->
-        <!-- DATA LAYER                              -->
-        <!-- ════════════════════════════════════════ -->
-        <g class="flow-node" data-tip="snowflake">
-          <rect x="50" y="1030" width="260" height="64" rx="10" fill="#181a20" stroke="#06b6d4" stroke-width="1.5"/>
-          <text x="72" y="1058" fill="#06b6d4" font-size="14">&#x2744;&#xFE0F;</text>
-          <text x="98" y="1058" fill="#e2e4ea" font-size="12" font-weight="600" font-family="system-ui">Snowflake</text>
-          <text x="98" y="1076" fill="#8b8fa3" font-size="10" font-family="system-ui">Separate account per tenant</text>
-        </g>
-
-        <g class="flow-node" data-tip="cache">
-          <rect x="390" y="1030" width="340" height="64" rx="10" fill="#181a20" stroke="#06b6d4" stroke-width="1.5"/>
-          <text x="412" y="1058" fill="#06b6d4" font-size="14">&#x1F343;</text>
-          <text x="438" y="1058" fill="#e2e4ea" font-size="12" font-weight="600" font-family="system-ui">Mongo / DocumentDB Cache</text>
-          <text x="438" y="1076" fill="#8b8fa3" font-size="10" font-family="system-ui">Conn string from secrets, TTL from repo JSON</text>
-        </g>
-
-        <g class="flow-node" data-tip="browser">
-          <rect x="810" y="1030" width="260" height="64" rx="10" fill="#181a20" stroke="#3b82f6" stroke-width="1.5"/>
-          <text x="832" y="1058" fill="#3b82f6" font-size="14">&#x1F5A5;&#xFE0F;</text>
-          <text x="858" y="1058" fill="#e2e4ea" font-size="12" font-weight="600" font-family="system-ui">User Browser</text>
-          <text x="858" y="1076" fill="#8b8fa3" font-size="10" font-family="system-ui">Branded UI, enabled features, SSO</text>
-        </g>
-
-        <!-- FastAPI -> Snowflake -->
-        <line x1="180" y1="808" x2="180" y2="1030" stroke="#06b6d4" stroke-width="2" marker-end="url(#a-cy)"/>
-        <text x="128" y="940" fill="#06b6d4" font-size="9" font-family="system-ui" transform="rotate(-90, 128, 940)">queries (snowflake_*)</text>
-        <!-- FastAPI -> Cache -->
-        <path d="M 200 930 L 440 930 L 440 1030" stroke="#06b6d4" stroke-width="2" fill="none" marker-end="url(#a-cy)"/>
-        <!-- Cache miss -->
-        <path d="M 390 1062 L 310 1062" stroke="#5c6078" stroke-width="1.5" stroke-dasharray="4,3" fill="none" marker-end="url(#a-mu)"/>
-        <text x="333" y="1056" fill="#5c6078" font-size="8" font-family="system-ui">cache miss</text>
-        <!-- Next.js -> Browser -->
-        <line x1="940" y1="808" x2="940" y2="1030" stroke="#3b82f6" stroke-width="2" marker-end="url(#a-bl)"/>
-        <text x="952" y="936" fill="#3b82f6" font-size="9" font-family="system-ui">renders</text>
-
-        <!-- Callout 7 -->
-        <circle cx="200" cy="920" r="10" fill="#06b6d4"/><text x="200" y="924" fill="white" font-size="9" font-weight="700" text-anchor="middle" font-family="system-ui">7</text>
-
-        <!-- ════════════════════════════════════════ -->
-        <!-- MULTI-CONTAINER                         -->
-        <!-- ════════════════════════════════════════ -->
-        <rect x="120" y="1132" width="880" height="72" rx="12" fill="rgba(99,102,241,0.04)" stroke="#2a2d38"/>
-        <rect x="186" y="1148" width="160" height="40" rx="6" fill="#181a20" stroke="#22c55e" stroke-width="1"/>
-        <text x="200" y="1165" fill="#22c55e" font-size="9" font-weight="600" font-family="system-ui">&#x1F4E6; millennium-api</text>
-        <text x="200" y="1179" fill="#5c6078" font-size="8" font-family="system-ui">IAM: millennium-role</text>
-        <rect x="376" y="1148" width="160" height="40" rx="6" fill="#181a20" stroke="#3b82f6" stroke-width="1"/>
-        <text x="390" y="1165" fill="#3b82f6" font-size="9" font-weight="600" font-family="system-ui">&#x1F4E6; kkr-api</text>
-        <text x="390" y="1179" fill="#5c6078" font-size="8" font-family="system-ui">IAM: kkr-role</text>
-        <rect x="566" y="1148" width="160" height="40" rx="6" fill="#181a20" stroke="#a855f7" stroke-width="1"/>
-        <text x="580" y="1165" fill="#a855f7" font-size="9" font-weight="600" font-family="system-ui">&#x1F4E6; acme-api</text>
-        <text x="580" y="1179" fill="#5c6078" font-size="8" font-family="system-ui">IAM: acme-role</text>
-        <text x="776" y="1164" fill="#5c6078" font-size="10" font-family="system-ui">Same Docker image</text>
-        <text x="776" y="1180" fill="#5c6078" font-size="10" font-family="system-ui">Different config + secrets</text>
-
-        <!-- Callout 8 -->
-        <circle cx="158" cy="1168" r="10" fill="#6366f1"/><text x="158" y="1172" fill="white" font-size="9" font-weight="700" text-anchor="middle" font-family="system-ui">8</text>
-      </svg>
+  <div class="tenant-grid" style="margin-top:16px">
+    <div class="card">
+      <h3>Deployment Model</h3>
+      <div class="deploy-model" id="deploy-model">
+        <div class="deploy-btn active" data-model="saas" onclick="selectDeploy('saas')">Multi-tenant SaaS</div>
+        <div class="deploy-btn" data-model="dedicated" onclick="selectDeploy('dedicated')">Dedicated Instance</div>
+      </div>
+      <div class="deploy-detail" id="deploy-detail"></div>
     </div>
-
-    <!-- Annotations grid (rendered by JS based on deploy mode) -->
-    <div class="flow-annotations" id="flow-annotations"></div>
+    <div class="card">
+      <h3>Architecture Flow</h3>
+      <div class="arch-diagram" id="arch-diagram"></div>
+    </div>
   </div>
 </div>
 
@@ -1834,7 +1430,7 @@ const treeData = {
       { id: 'intellilake/contracts/schemas', label: 'schemas/', icon: '📐', depth: 2, owner: 'Tech Lead', team: 'Platform', badge: 'badge-tech',
         desc: 'JSON Schema definitions that validate contract files. CI runs validation on every PR to catch config drift before it reaches production.',
         why: 'A malformed tenant config can break the entire application for a client. JSON Schema validation in CI catches structural errors before they merge — like type-checking but for configuration files. If someone adds a new field or typos a feature flag name, CI rejects the PR.',
-        files: ['tenant.schema.json', 'secret.template.json'],
+        files: ['tenant.schema.json'],
         interacts: [
           { arrow: '→', target: 'contracts/tenant-configs/', note: 'Validates all tenant config files on every PR' },
           { arrow: '←', target: 'infra/ci/', note: 'CI pipeline runs schema validation as a required check' },
@@ -1901,7 +1497,7 @@ const treeData = {
       { id: 'intellilake/infra/docker', label: 'docker/', icon: '🐳', depth: 2, owner: 'Tech Lead', team: 'Platform', badge: 'badge-tech',
         desc: 'Dockerfiles and compose configurations. One image per service (web, api), deployed as container-per-client.',
         why: 'The container-per-client model means each client gets their own running container from the same Docker image. Docker ensures the image is identical everywhere — what works in staging works in production. docker-compose enables local development with both services running together.',
-        files: ['Dockerfile.web', 'Dockerfile.api', 'docker-compose.yml', 'docker-compose.dev.yml', 'docker-compose.dedicated.yml'],
+        files: ['Dockerfile.web', 'Dockerfile.api', 'docker-compose.yml', 'docker-compose.dev.yml'],
         interacts: [
           { arrow: '←', target: 'apps/web/', note: 'Dockerfile.web builds the Next.js container image' },
           { arrow: '←', target: 'apps/api/', note: 'Dockerfile.api builds the FastAPI container image' },
@@ -1940,7 +1536,7 @@ const treeData = {
       { id: 'intellilake/docs/runbooks', label: 'runbooks/', icon: '📖', depth: 2, owner: 'Tech Lead', team: 'Platform', badge: 'badge-tech',
         desc: 'Operational how-to guides. Living documents updated as processes evolve.',
         why: 'Runbooks are step-by-step procedures for operations that happen repeatedly: onboarding a new tenant, promoting staging to production, handling a hotfix. Unlike ADRs (immutable), runbooks are updated whenever the process changes.',
-        files: ['new-tenant-standup.md', 'dedicated-instance-setup.md', 'release-process.md', 'hotfix-process.md'] },
+        files: ['new-tenant-standup.md', 'release-process.md', 'hotfix-process.md'] },
       { id: 'intellilake/docs/user', label: 'user/', icon: '👤', depth: 2, owner: 'FE Lead', team: 'UI', badge: 'badge-fe',
         desc: 'User-facing MDX docs rendered in-app at /app/docs/[slug]. Tenant-aware via TenantFeature components. Ships with container for version matching.',
         why: 'Docs render inside the application behind auth. The TenantFeature component conditionally shows/hides sections based on the client\'s feature flags — KKR sees docs for features they have, not features only Millennium has. Docs ship inside the Docker container so dedicated-instance clients see docs matching their container version.',
@@ -2609,19 +2205,6 @@ const decisions = [
     ],
     adr: '009-api-security-layer.md (pending)',
   },
-  {
-    id: 'client-agnostic-builds',
-    status: 'confirmed',
-    title: 'Client-agnostic Docker builds',
-    subtitle: 'Zero client secrets at build time — one image works for all clients',
-    rationale: 'The current build process requires client-specific secrets at build time (GitHub Actions secrets, NEXT_PUBLIC env vars). This means each client needs a separate build pipeline. Scaling to N clients would require N pipelines. Dedicated-instance clients can\'t receive a pre-built image.\n\nThe solution: the Docker image is completely client-agnostic. It contains application code and (for SaaS) all tenant JSON configs, but zero client secrets. At container startup, 3 environment variables tell the container who it is: TENANT_ID (which config to read), SECRET_NAME (which AWS secret to fetch), and AWS_REGION (where to fetch it from). For dedicated instances, the client additionally provides their tenant JSON via volume mount.\n\nThis also means the frontend must eliminate all NEXT_PUBLIC_ variables. Instead, the frontend fetches tenant config from a GET /config/public API endpoint at runtime. One build, all clients, both deployment models.',
-    chosen: { label: 'Zero secrets at build time', desc: 'One pipeline produces one image. TENANT_ID + SECRET_NAME + AWS_REGION injected at container start. Frontend uses runtime config from API instead of NEXT_PUBLIC_ vars.' },
-    alternatives: [
-      { label: 'Per-client build pipelines', desc: 'Current approach. Client-specific secrets baked in at build time. Doesn\'t scale beyond a handful of clients. Dedicated-instance clients can\'t receive pre-built images.' },
-      { label: 'GitHub org-level secrets', desc: 'Requires GitHub Enterprise. Still couples the build to specific clients. Adding a client still requires changing CI config.' },
-    ],
-    adr: '011-client-agnostic-builds.md',
-  },
 ];
 
 function renderDecisions() {
@@ -2762,138 +2345,6 @@ document.querySelectorAll('.tab').forEach(tab => {
   });
 });
 
-// ── FLOW DEPLOY MODE ──
-
-var flowMode = 'saas';
-
-var flowModeContext = {
-  saas: '<strong>SaaS Model (Intellilake-managed):</strong> Intellilake manages all infrastructure. Intellilake DevOps creates secrets in AWS Secrets Manager, configures IAM roles, and deploys containers to ECS Fargate. Tenant JSON configs are baked into the Docker image. The client has no direct access to infrastructure \u2014 Intellilake handles onboarding, config changes, and secrets rotation.',
-  dedicated: '<strong>Dedicated Instance (Client-managed):</strong> The client runs everything in their own AWS account. Intellilake publishes semver-tagged Docker images to a shared registry. The client pulls the image, creates their own AWS Secrets Manager secret, configures their own IAM role, and provides their own tenant config JSON (either volume-mounted or baked into a client-built image layer). Intellilake provides documentation and the config schema \u2014 but has <strong>no access</strong> to the client\u2019s environment. The flow below is identical; only the <em>actors</em> change.'
-};
-
-var flowAnnotations = {
-  saas: [
-    { border:'var(--green)', bg:'var(--accent)', num:'1', title:'Developer Edits Config (PR Path)', text:'Developer changes <code>contracts/tenant-configs/{client}.json</code> on a feature branch. Contains <strong>non-secret config only</strong>: feature flags, branding, auth provider, Snowflake account ID, cache TTL. Same PR workflow as code.' },
-    { border:'var(--amber)', bg:'var(--accent)', num:'2', title:'Secrets Managed by Intellilake Ops', text:'Intellilake Tech Lead updates AWS Secrets Manager via console/CLI. <strong>No PR, no code change, no redeploy.</strong> Includes Snowflake passwords, DB connection strings, auth client secrets. Separate secrets per environment. Next container restart picks up changes.' },
-    { border:'var(--green)', bg:'var(--accent)', num:'3', title:'JSON Baked Into Docker Image', text:'CI copies all <code>contracts/tenant-configs/</code> into the image at build time. The JSON is <strong>immutable inside the image</strong> \u2014 the exact config that passed CI validation is what runs in staging and production.' },
-    { border:'var(--purple)', bg:'var(--purple)', num:'4', title:'The Merge Point (Container Startup)', text:'<strong>Step 1:</strong> Read <code>{client}.json</code> from disk. <strong>Step 2:</strong> Fetch secret via IAM role. <strong>Step 3:</strong> Deep-merge into single runtime config dict. App reads <code>config.features.bulk_export</code> (JSON) and <code>config.snowflake.password</code> (secret) from the <strong>same object</strong>.' },
-    { border:'var(--green)', bg:'var(--accent)', num:'5', title:'FastAPI Consumes Merged Config', text:'<code>features.*</code> gates business logic. <code>snowflake_*</code> credentials connect to Snowflake. <code>cache_connection_string</code> connects to Mongo/DocumentDB. <code>data.cache_ttl_minutes</code> controls cache lifetime. API never reads from Secrets Manager directly after startup.' },
-    { border:'var(--blue)', bg:'var(--accent)', num:'6', title:'Next.js Reads Non-Secret Config', text:'Frontend reads <strong>only repo JSON fields</strong>: <code>branding.*</code> (logo, colors, theme), <code>features.*</code> (component visibility), <code>auth.provider</code> (login flow). Config served via API endpoint \u2014 <strong>secrets never leave the backend</strong>.' },
-    { border:'var(--cyan)', bg:'#06b6d4', num:'7', title:'Data Layer Uses Secret Credentials', text:'<strong>Snowflake:</strong> <code>snowflake_user</code> + <code>snowflake_password</code> + <code>snowflake_warehouse</code> + <code>snowflake_database</code>. <strong>Cache:</strong> <code>cache_connection_string</code> (DocumentDB for MLP, MongoDB for others). Cache TTL from repo JSON. Miss \u2192 query Snowflake \u2192 store \u2192 return.' },
-    { border:'var(--accent)', bg:'var(--accent)', num:'8', title:'Container-per-Client Isolation', text:'Same Docker image, separate container per client in Intellilake\u2019s ECS cluster. Each has <strong>its own IAM role</strong> (one secret only), <strong>its own tenant JSON</strong> (via <code>TENANT_ID</code> env var), and <strong>its own Snowflake account</strong>. Load balancer routes each client to their container.' }
-  ],
-  dedicated: [
-    { border:'var(--green)', bg:'var(--accent)', num:'1', title:'Intellilake Provides Config Template', text:'Intellilake publishes <code>config.example.json</code> and the JSON Schema (<code>tenant.schema.json</code>). The <strong>client\u2019s ops team</strong> creates their own <code>{tenant}.json</code> following the schema. They can validate it locally with <code>npx ajv</code>. This file is the client\u2019s responsibility \u2014 Intellilake provides the structure, the client fills in their values.' },
-    { border:'var(--amber)', bg:'var(--accent)', num:'2', title:'Client Manages Their Own Secrets', text:'The <strong>client\u2019s ops team</strong> creates a secret in their own AWS Secrets Manager (e.g., <code>intellilake/{tenant}/prod</code>). Intellilake provides documentation listing the required secret fields (snowflake_password, cache_connection_string, etc.). The client populates these values. <strong>Intellilake has no access to the client\u2019s AWS account.</strong>' },
-    { border:'var(--green)', bg:'var(--accent)', num:'3', title:'Client Pulls Published Image', text:'Intellilake publishes semver-tagged Docker images (e.g., <code>v2.1.0</code>) to a shared ECR or delivers image tars. The client pulls the image into their own registry. The image contains the application code but <strong>no client-specific config</strong> \u2014 the client provides their tenant JSON via volume mount or a thin wrapper image layer.' },
-    { border:'var(--purple)', bg:'var(--purple)', num:'4', title:'The Merge Point (Same as SaaS)', text:'Identical to SaaS: <strong>Step 1:</strong> Read tenant JSON from disk (client-provided). <strong>Step 2:</strong> Fetch secret from the client\u2019s own AWS Secrets Manager via the client\u2019s own IAM role. <strong>Step 3:</strong> Deep-merge into single runtime config dict. The application code is identical \u2014 it doesn\u2019t know whether Intellilake or the client manages the infrastructure.' },
-    { border:'var(--green)', bg:'var(--accent)', num:'5', title:'FastAPI Consumes Merged Config', text:'Identical to SaaS. <code>features.*</code> gates business logic. Snowflake and cache credentials establish data connections. The API doesn\u2019t know who manages the secrets \u2014 it just reads from the merged config object.' },
-    { border:'var(--blue)', bg:'var(--accent)', num:'6', title:'Next.js Reads Non-Secret Config', text:'Identical to SaaS. Frontend reads only non-secret config via the API. The client\u2019s branding, enabled features, and auth provider are all controlled by the tenant JSON they provided.' },
-    { border:'var(--cyan)', bg:'#06b6d4', num:'7', title:'Data Layer (Client\u2019s Infrastructure)', text:'The client\u2019s Snowflake account, the client\u2019s Mongo/DocumentDB instance. All connection credentials come from the client\u2019s own Secrets Manager. Intellilake\u2019s code connects using whatever credentials the client provided \u2014 it has no visibility into the client\u2019s data layer.' },
-    { border:'var(--accent)', bg:'var(--accent)', num:'8', title:'Full Physical Isolation', text:'The client runs <strong>one container</strong> (or a cluster) in their own AWS account. They control IAM, networking, scaling, and upgrades. They choose when to pull a new image version. Intellilake provides release notes and migration docs. No other tenant exists in their environment \u2014 <strong>complete physical isolation</strong>.' }
-  ]
-};
-
-function selectFlowMode(mode) {
-  flowMode = mode;
-  document.querySelectorAll('#flow-deploy-mode .deploy-btn').forEach(function(el) { el.classList.remove('active'); });
-  document.querySelector('#flow-deploy-mode [data-fmode="' + mode + '"]').classList.add('active');
-  renderFlowMode();
-  updatePrompt();
-}
-
-function renderFlowMode() {
-  // Context card — all content is static, defined in flowModeContext above
-  var ctx = document.getElementById('flow-mode-context');
-  ctx.innerHTML = '<div style="font-size:12px;line-height:1.7;color:var(--text-dim)">' + flowModeContext[flowMode] + '</div>';
-
-  // Annotations — all content is static, defined in flowAnnotations above
-  var container = document.getElementById('flow-annotations');
-  var html = '';
-  var anns = flowAnnotations[flowMode];
-  for (var i = 0; i < anns.length; i++) {
-    var a = anns[i];
-    html += '<div class="flow-ann" style="border-left:3px solid ' + a.border + '"><h4><div class="flow-ann-num" style="background:' + a.bg + '">' + a.num + '</div> ' + a.title + '</h4><p>' + a.text + '</p></div>';
-  }
-  container.innerHTML = html;
-}
-
-// ── SUBTAB SWITCHING ──
-
-function selectTenantSubtab(key) {
-  document.querySelectorAll('#tenant-subtabs .subtab').forEach(function(el) { el.classList.remove('active'); });
-  document.querySelector('#tenant-subtabs [data-subtab="' + key + '"]').classList.add('active');
-  document.querySelectorAll('#panel-tenant .subtab-content').forEach(function(el) { el.classList.remove('active'); });
-  document.getElementById('subtab-' + key).classList.add('active');
-  updatePrompt();
-}
-
-// ── FLOWCHART TOOLTIPS ──
-
-var flowTipData = {
-  'developer': ['Developer (Config Author)', 'Edits contracts/tenant-configs/{client}.json on a feature branch. Same PR workflow as code. Tech Lead is auto-assigned as reviewer via CODEOWNERS.'],
-  'tenant-json-tip': ['contracts/tenant-configs/*.json', 'Per-client JSON: tenant_id, display_name, auth (provider + protocol), branding (logo, color, theme), features (boolean flags), data (Snowflake account, cache TTL). Validated against tenant.schema.json on every PR.'],
-  'schema-validate': ['CI Schema Validation', 'Runs npx ajv validate on every PR. Catches missing fields, wrong types, invalid enums, unknown properties. Malformed config cannot merge.'],
-  'ops': ['Tech Lead / DevOps', 'Manages secrets via AWS Console/CLI. No code change or redeploy needed. Secrets fetched fresh at each container startup. CloudTrail audit trail.'],
-  'secrets-manager': ['AWS Secrets Manager', 'Per-client, per-environment secrets (intellilake/{tenant}/{env}). Snowflake credentials, DB connection strings, auth secrets. KMS encryption, rotation, IAM access control.'],
-  'iam-role': ['Per-Client IAM Role', 'Each ECS task gets a unique IAM role granting secretsmanager:GetSecretValue for exactly one secret ARN. Even compromised code cannot read another client\u2019s secret.'],
-  'docker-image': ['Docker Image Build', 'CI builds Dockerfile.web and Dockerfile.api. contracts/ is COPY\u2019d into the image. Tagged with commit SHA. Same image for all clients \u2014 TENANT_ID env var selects which JSON.'],
-  'ecr': ['AWS ECR', 'Images pushed after CI passes. SaaS: tagged with commit SHA. Dedicated: also tagged semver (v2.1.0). Immutable once pushed.'],
-  'load-balancer': ['Application Load Balancer', 'Routes by client ID (subdomain or path). WAF rules for IP filtering and rate limiting at infrastructure level.'],
-  'read-json': ['Step 1: Read JSON from Disk', 'Reads /app/contracts/tenant-configs/{TENANT_ID}.json baked into the image. TENANT_ID env var set in ECS task definition. No network call needed.'],
-  'fetch-secrets': ['Step 2: Fetch Secret via IAM', 'Calls get_secret_value(SecretId="intellilake/{tenant_id}/prod"). IAM role provides credentials automatically. Policy restricts to one secret ARN.'],
-  'merge-point': ['Step 3: Deep Merge \u2192 Runtime Config', 'Both sources deep-merged into a single dict. config["features"]["bulk_export"] from repo JSON, config["snowflake"]["password"] from Secrets Manager. App reads from this only.'],
-  'fastapi': ['FastAPI Backend', 'Reads both repo and secret fields. Feature flags gate logic. Snowflake/cache credentials establish connections. Generates OpenAPI spec for TS type generation.'],
-  'auth-layer': ['Auth Abstraction Layer', 'Configures from merged config: auth.provider selects strategy, auth.protocol selects flow, auth_client_secret provides credential. New provider = new config entry.'],
-  'nextjs': ['Next.js Frontend', 'Reads only non-secret config via API. Branding controls visual theme. Features control component registry. Secrets never reach the frontend.'],
-  'snowflake': ['Snowflake', 'Separate account per client. Credentials from merged config (originally from Secrets Manager). Schema migrations via schemachange, independently per tenant.'],
-  'cache': ['Mongo / DocumentDB Cache', 'Connection string from secrets. TTL from repo JSON. On request: check cache \u2192 hit = return \u2192 miss = query Snowflake \u2192 store \u2192 return.'],
-  'browser': ['User Browser', 'Branded experience: client logo, color scheme, theme. Only enabled features appear. Login flow matches client auth provider. User never sees other tenants.']
-};
-
-var flowTip = null;
-var flowTipVisible = false;
-
-function initFlowTooltips() {
-  flowTip = document.createElement('div');
-  flowTip.className = 'flow-tip';
-  document.body.appendChild(flowTip);
-
-  document.querySelectorAll('#subtab-config-flow .flow-node').forEach(function(node) {
-    node.addEventListener('mouseenter', function(e) {
-      var key = node.dataset.tip;
-      if (!key || !flowTipData[key]) return;
-      var data = flowTipData[key];
-      flowTip.textContent = '';
-      var t = document.createElement('div');
-      t.className = 'flow-tip-title';
-      t.textContent = data[0];
-      flowTip.appendChild(t);
-      var b = document.createElement('div');
-      b.textContent = data[1];
-      flowTip.appendChild(b);
-      flowTip.classList.add('visible');
-      flowTipVisible = true;
-      posFlowTip(e);
-    });
-    node.addEventListener('mousemove', posFlowTip);
-    node.addEventListener('mouseleave', function() {
-      flowTip.classList.remove('visible');
-      flowTipVisible = false;
-    });
-  });
-}
-
-function posFlowTip(e) {
-  if (!flowTipVisible) return;
-  var x = e.clientX + 14;
-  var y = e.clientY + 14;
-  if (x + 340 > window.innerWidth) x = e.clientX - 354;
-  if (y + 180 > window.innerHeight) y = e.clientY - 180;
-  flowTip.style.left = x + 'px';
-  flowTip.style.top = y + 'px';
-}
-
 // ── INIT ──
 
 renderDecisions();
@@ -2907,8 +2358,6 @@ renderArchDiagram();
 renderCycle();
 renderTeams();
 renderLabels();
-renderFlowMode();
-initFlowTooltips();
 updatePrompt();
 </script>
 </body>
