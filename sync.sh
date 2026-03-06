@@ -33,8 +33,6 @@ html_escape() {
   printf '%s' "$1" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g'
 }
 
-# Compute branch-specific dest filename.
-# Single-branch sources keep the original dest; multi-branch get a suffix.
 branch_dest() {
   local dest="$1" branch="$2" num_branches="$3"
   if [ "$num_branches" -le 1 ]; then
@@ -46,13 +44,99 @@ branch_dest() {
   fi
 }
 
-# Map branch name to a tag color for the index card.
-branch_color() {
+tab_label() {
   case "$1" in
-    main)    echo "green" ;;
-    staging) echo "amber" ;;
-    *)       echo "accent" ;;
+    main)    echo "Production" ;;
+    staging) echo "Staging" ;;
+    *)       echo "$1" ;;
   esac
+}
+
+# Emit card HTML for all files matching a given branch, appending to $INDEX.
+emit_cards() {
+  local target_branch="$1"
+  for (( i=0; i<num_sources; i++ )); do
+    local nb
+    nb=$(jq ".sources[$i].branches | length" "$SOURCES_FILE")
+    local nf
+    nf=$(jq ".sources[$i].files | length" "$SOURCES_FILE")
+
+    for (( b=0; b<nb; b++ )); do
+      local br
+      br=$(jq -r ".sources[$i].branches[$b]" "$SOURCES_FILE")
+      [ "$br" = "$target_branch" ] || continue
+
+      for (( j=0; j<nf; j++ )); do
+        local dest icon icon_color icon_rgb title desc escaped_title escaped_desc bdest
+        dest=$(jq -r ".sources[$i].files[$j].dest // empty" "$SOURCES_FILE")
+        [ -z "$dest" ] && dest=$(jq -r ".sources[$i].files[$j].src | split(\"/\")[-1]" "$SOURCES_FILE")
+
+        bdest=$(branch_dest "$dest" "$br" "$nb")
+        [ -f "$DOCS_DIR/$bdest" ] || continue
+
+        title=$(jq -r ".sources[$i].files[$j].title // \"Untitled\"" "$SOURCES_FILE")
+        desc=$(jq -r ".sources[$i].files[$j].description // \"\"" "$SOURCES_FILE")
+        icon=$(jq -r ".sources[$i].files[$j].icon // \"📄\"" "$SOURCES_FILE")
+        icon_color=$(jq -r ".sources[$i].files[$j].icon_color // \"accent\"" "$SOURCES_FILE")
+
+        icon_rgb=$(color_rgb "$icon_color")
+        escaped_title=$(html_escape "$title")
+        escaped_desc=$(html_escape "$desc")
+
+        cat >> "$INDEX" <<CARD_OPEN
+
+    <a class="card" href="$bdest">
+      <div class="card-top">
+        <div class="card-icon" style="background:rgba($icon_rgb,0.1)">$icon</div>
+        <div class="card-title">$escaped_title</div>
+      </div>
+      <div class="card-desc">
+        $escaped_desc
+      </div>
+      <div class="card-tags">
+CARD_OPEN
+
+        local nt
+        nt=$(jq ".sources[$i].files[$j].tags | length" "$SOURCES_FILE")
+        for (( k=0; k<nt; k++ )); do
+          local tag_label tag_color tag_rgb escaped_label
+          tag_label=$(jq -r ".sources[$i].files[$j].tags[$k].label" "$SOURCES_FILE")
+          tag_color=$(jq -r ".sources[$i].files[$j].tags[$k].color // \"accent\"" "$SOURCES_FILE")
+          tag_rgb=$(color_rgb "$tag_color")
+          escaped_label=$(html_escape "$tag_label")
+          echo "        <span class=\"tag\" style=\"background:rgba($tag_rgb,0.15);color:var(--$tag_color)\">$escaped_label</span>" >> "$INDEX"
+        done
+
+        cat >> "$INDEX" << 'CARD_CLOSE'
+      </div>
+    </a>
+CARD_CLOSE
+      done
+    done
+  done
+}
+
+# Check if any synced files exist for a given branch.
+branch_has_files() {
+  local target_branch="$1"
+  for (( i=0; i<num_sources; i++ )); do
+    local nb nf
+    nb=$(jq ".sources[$i].branches | length" "$SOURCES_FILE")
+    nf=$(jq ".sources[$i].files | length" "$SOURCES_FILE")
+    for (( b=0; b<nb; b++ )); do
+      local br
+      br=$(jq -r ".sources[$i].branches[$b]" "$SOURCES_FILE")
+      [ "$br" = "$target_branch" ] || continue
+      for (( j=0; j<nf; j++ )); do
+        local dest bdest
+        dest=$(jq -r ".sources[$i].files[$j].dest // empty" "$SOURCES_FILE")
+        [ -z "$dest" ] && dest=$(jq -r ".sources[$i].files[$j].src | split(\"/\")[-1]" "$SOURCES_FILE")
+        bdest=$(branch_dest "$dest" "$br" "$nb")
+        [ -f "$DOCS_DIR/$bdest" ] && return 0
+      done
+    done
+  done
+  return 1
 }
 
 # ---------------------------------------------------------------------------
@@ -110,7 +194,19 @@ for (( i=0; i<num_sources; i++ )); do
 done
 
 # ---------------------------------------------------------------------------
-# 2. Regenerate index.html from sources.json metadata
+# 2. Collect active tabs (branches that have at least one synced file)
+# ---------------------------------------------------------------------------
+ACTIVE_TABS=()
+ALL_BRANCHES=$(jq -r '[.sources[].branches[]] | unique | .[]' "$SOURCES_FILE")
+for br in $ALL_BRANCHES; do
+  if branch_has_files "$br"; then
+    ACTIVE_TABS+=("$br")
+  fi
+done
+NUM_TABS=${#ACTIVE_TABS[@]}
+
+# ---------------------------------------------------------------------------
+# 3. Regenerate index.html
 # ---------------------------------------------------------------------------
 echo ""
 echo "==> Regenerating index.html..."
@@ -181,6 +277,32 @@ cat > "$INDEX" << 'HTML_HEAD'
     color: var(--text-muted);
     margin-bottom: 16px;
   }
+  .tabs {
+    display: flex;
+    gap: 0;
+    margin-bottom: 24px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    width: fit-content;
+  }
+  .tab {
+    padding: 9px 20px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-dim);
+    cursor: pointer;
+    background: var(--surface);
+    border: none;
+    border-right: 1px solid var(--border);
+    transition: all 0.15s;
+    user-select: none;
+  }
+  .tab:last-child { border-right: none; }
+  .tab:hover { color: var(--text); background: var(--surface2); }
+  .tab.active { color: var(--accent); background: rgba(99,102,241,0.08); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
   .cards { display: flex; flex-direction: column; gap: 12px; }
   .card {
     display: block;
@@ -241,90 +363,75 @@ cat > "$INDEX" << 'HTML_HEAD'
 
 <div class="content">
   <div class="section-label">Available Playgrounds</div>
-  <div class="cards">
 HTML_HEAD
 
-# --- Cards (one per playground file per branch) ------------------------------
-for (( i=0; i<num_sources; i++ )); do
-  num_branches=$(jq ".sources[$i].branches | length" "$SOURCES_FILE")
-  num_files=$(jq ".sources[$i].files | length" "$SOURCES_FILE")
-
-  for (( b=0; b<num_branches; b++ )); do
-    branch=$(jq -r ".sources[$i].branches[$b]" "$SOURCES_FILE")
-
-    for (( j=0; j<num_files; j++ )); do
-      dest=$(jq -r ".sources[$i].files[$j].dest // empty" "$SOURCES_FILE")
-      [ -z "$dest" ] && dest=$(jq -r ".sources[$i].files[$j].src | split(\"/\")[-1]" "$SOURCES_FILE")
-
-      bdest=$(branch_dest "$dest" "$branch" "$num_branches")
-
-      # Only emit a card if the file was actually synced
-      [ -f "$DOCS_DIR/$bdest" ] || continue
-
-      title=$(jq -r ".sources[$i].files[$j].title // \"Untitled\"" "$SOURCES_FILE")
-      desc=$(jq -r ".sources[$i].files[$j].description // \"\"" "$SOURCES_FILE")
-      icon=$(jq -r ".sources[$i].files[$j].icon // \"📄\"" "$SOURCES_FILE")
-      icon_color=$(jq -r ".sources[$i].files[$j].icon_color // \"accent\"" "$SOURCES_FILE")
-
-      icon_rgb=$(color_rgb "$icon_color")
-      escaped_title=$(html_escape "$title")
-      escaped_desc=$(html_escape "$desc")
-
-      # Open card
-      cat >> "$INDEX" <<CARD_OPEN
-
-    <a class="card" href="$bdest">
-      <div class="card-top">
-        <div class="card-icon" style="background:rgba($icon_rgb,0.1)">$icon</div>
-        <div class="card-title">$escaped_title</div>
-      </div>
-      <div class="card-desc">
-        $escaped_desc
-      </div>
-      <div class="card-tags">
-CARD_OPEN
-
-      # Branch tag (only for multi-branch sources)
-      if [ "$num_branches" -gt 1 ]; then
-        bcolor=$(branch_color "$branch")
-        brgb=$(color_rgb "$bcolor")
-        echo "        <span class=\"tag\" style=\"background:rgba($brgb,0.15);color:var(--$bcolor)\">$branch</span>" >> "$INDEX"
-      fi
-
-      # Content tags
-      num_tags=$(jq ".sources[$i].files[$j].tags | length" "$SOURCES_FILE")
-      for (( k=0; k<num_tags; k++ )); do
-        tag_label=$(jq -r ".sources[$i].files[$j].tags[$k].label" "$SOURCES_FILE")
-        tag_color=$(jq -r ".sources[$i].files[$j].tags[$k].color // \"accent\"" "$SOURCES_FILE")
-        tag_rgb=$(color_rgb "$tag_color")
-        escaped_label=$(html_escape "$tag_label")
-        echo "        <span class=\"tag\" style=\"background:rgba($tag_rgb,0.15);color:var(--$tag_color)\">$escaped_label</span>" >> "$INDEX"
-      done
-
-      # Close card
-      cat >> "$INDEX" << 'CARD_CLOSE'
-      </div>
-    </a>
-CARD_CLOSE
-
-    done
+# --- Tab bar (only if multiple tabs) -----------------------------------------
+if [ "$NUM_TABS" -gt 1 ]; then
+  echo '  <div class="tabs">' >> "$INDEX"
+  first=true
+  for tab_branch in "${ACTIVE_TABS[@]}"; do
+    label=$(tab_label "$tab_branch")
+    if $first; then
+      echo "    <button class=\"tab active\" data-tab=\"$tab_branch\">$label</button>" >> "$INDEX"
+      first=false
+    else
+      echo "    <button class=\"tab\" data-tab=\"$tab_branch\">$label</button>" >> "$INDEX"
+    fi
   done
+  echo '  </div>' >> "$INDEX"
+fi
+
+# --- Tab panels ---------------------------------------------------------------
+first=true
+for tab_branch in "${ACTIVE_TABS[@]}"; do
+  if [ "$NUM_TABS" -gt 1 ]; then
+    if $first; then
+      echo "  <div class=\"tab-panel active\" id=\"tab-$tab_branch\">" >> "$INDEX"
+      first=false
+    else
+      echo "  <div class=\"tab-panel\" id=\"tab-$tab_branch\">" >> "$INDEX"
+    fi
+  fi
+
+  echo '  <div class="cards">' >> "$INDEX"
+  emit_cards "$tab_branch"
+  echo '  </div>' >> "$INDEX"
+
+  if [ "$NUM_TABS" -gt 1 ]; then
+    echo '  </div>' >> "$INDEX"
+  fi
 done
 
-# --- Footer ----------------------------------------------------------------
+# --- Footer & script ----------------------------------------------------------
 SYNC_DATE=$(date -u '+%Y-%m-%d %H:%M UTC')
 cat >> "$INDEX" <<HTML_FOOT
 
-  </div>
 </div>
 
 <div class="footer">
   Intellilake &mdash; <a href="https://github.com/IL-SCoussens/playgrounds">Source on GitHub</a> &mdash; Last synced $SYNC_DATE
 </div>
-
-</body>
-</html>
 HTML_FOOT
+
+if [ "$NUM_TABS" -gt 1 ]; then
+  cat >> "$INDEX" << 'HTML_SCRIPT'
+
+<script>
+document.querySelectorAll('.tab').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
+    document.querySelectorAll('.tab-panel').forEach(function(p) { p.classList.remove('active'); });
+    btn.classList.add('active');
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+  });
+});
+</script>
+HTML_SCRIPT
+fi
+
+echo '' >> "$INDEX"
+echo '</body>' >> "$INDEX"
+echo '</html>' >> "$INDEX"
 
 # ---------------------------------------------------------------------------
 # Summary

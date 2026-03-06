@@ -60,6 +60,32 @@
     color: var(--text-muted);
     margin-bottom: 16px;
   }
+  .tabs {
+    display: flex;
+    gap: 0;
+    margin-bottom: 24px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    width: fit-content;
+  }
+  .tab {
+    padding: 9px 20px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-dim);
+    cursor: pointer;
+    background: var(--surface);
+    border: none;
+    border-right: 1px solid var(--border);
+    transition: all 0.15s;
+    user-select: none;
+  }
+  .tab:last-child { border-right: none; }
+  .tab:hover { color: var(--text); background: var(--surface2); }
+  .tab.active { color: var(--accent); background: rgba(99,102,241,0.08); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
   .cards { display: flex; flex-direction: column; gap: 12px; }
   .card {
     display: block;
@@ -120,6 +146,11 @@
 
 <div class="content">
   <div class="section-label">Available Playgrounds</div>
+  <div class="tabs">
+    <button class="tab active" data-tab="main">Production</button>
+    <button class="tab" data-tab="staging">Staging</button>
+  </div>
+  <div class="tab-panel active" id="tab-main">
   <div class="cards">
 
     <a class="card" href="platform-overview-main.html">
@@ -131,25 +162,6 @@
         Interactive overview of the Intellilake platform: architecture decisions, monorepo structure, Git &amp; Linear workflow, tenant configuration flow (with SaaS/Dedicated toggle), CI/CD pipeline, and sprint cycles. 6 tabbed panels with clickable diagrams and detailed callouts.
       </div>
       <div class="card-tags">
-        <span class="tag" style="background:rgba(34,197,94,0.15);color:var(--green)">main</span>
-        <span class="tag" style="background:rgba(99,102,241,0.15);color:var(--accent)">Architecture</span>
-        <span class="tag" style="background:rgba(34,197,94,0.15);color:var(--green)">Config Flow</span>
-        <span class="tag" style="background:rgba(245,158,11,0.15);color:var(--amber)">Multi-Tenant</span>
-        <span class="tag" style="background:rgba(59,130,246,0.15);color:var(--blue)">CI/CD</span>
-        <span class="tag" style="background:rgba(168,85,247,0.15);color:var(--purple)">ADRs</span>
-      </div>
-    </a>
-
-    <a class="card" href="platform-overview-staging.html">
-      <div class="card-top">
-        <div class="card-icon" style="background:rgba(99,102,241,0.1)">🏗️</div>
-        <div class="card-title">Platform Architecture &amp; Dev Process</div>
-      </div>
-      <div class="card-desc">
-        Interactive overview of the Intellilake platform: architecture decisions, monorepo structure, Git &amp; Linear workflow, tenant configuration flow (with SaaS/Dedicated toggle), CI/CD pipeline, and sprint cycles. 6 tabbed panels with clickable diagrams and detailed callouts.
-      </div>
-      <div class="card-tags">
-        <span class="tag" style="background:rgba(245,158,11,0.15);color:var(--amber)">staging</span>
         <span class="tag" style="background:rgba(99,102,241,0.15);color:var(--accent)">Architecture</span>
         <span class="tag" style="background:rgba(34,197,94,0.15);color:var(--green)">Config Flow</span>
         <span class="tag" style="background:rgba(245,158,11,0.15);color:var(--amber)">Multi-Tenant</span>
@@ -172,13 +184,46 @@
         <span class="tag" style="background:rgba(245,158,11,0.15);color:var(--amber)">Hierarchy</span>
       </div>
     </a>
-
   </div>
+  </div>
+  <div class="tab-panel" id="tab-staging">
+  <div class="cards">
+
+    <a class="card" href="platform-overview-staging.html">
+      <div class="card-top">
+        <div class="card-icon" style="background:rgba(99,102,241,0.1)">🏗️</div>
+        <div class="card-title">Platform Architecture &amp; Dev Process</div>
+      </div>
+      <div class="card-desc">
+        Interactive overview of the Intellilake platform: architecture decisions, monorepo structure, Git &amp; Linear workflow, tenant configuration flow (with SaaS/Dedicated toggle), CI/CD pipeline, and sprint cycles. 6 tabbed panels with clickable diagrams and detailed callouts.
+      </div>
+      <div class="card-tags">
+        <span class="tag" style="background:rgba(99,102,241,0.15);color:var(--accent)">Architecture</span>
+        <span class="tag" style="background:rgba(34,197,94,0.15);color:var(--green)">Config Flow</span>
+        <span class="tag" style="background:rgba(245,158,11,0.15);color:var(--amber)">Multi-Tenant</span>
+        <span class="tag" style="background:rgba(59,130,246,0.15);color:var(--blue)">CI/CD</span>
+        <span class="tag" style="background:rgba(168,85,247,0.15);color:var(--purple)">ADRs</span>
+      </div>
+    </a>
+  </div>
+  </div>
+
 </div>
 
 <div class="footer">
-  Intellilake &mdash; <a href="https://github.com/IL-SCoussens/playgrounds">Source on GitHub</a> &mdash; Last synced 2026-03-06 17:27 UTC
+  Intellilake &mdash; <a href="https://github.com/IL-SCoussens/playgrounds">Source on GitHub</a> &mdash; Last synced 2026-03-06 21:19 UTC
 </div>
+
+<script>
+document.querySelectorAll('.tab').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
+    document.querySelectorAll('.tab-panel').forEach(function(p) { p.classList.remove('active'); });
+    btn.classList.add('active');
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+  });
+});
+</script>
 
 </body>
 </html>
