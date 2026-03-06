@@ -15,7 +15,7 @@ command -v git >/dev/null 2>&1 || { echo "Error: git is required"; exit 1; }
 mkdir -p "$DOCS_DIR"
 
 # ---------------------------------------------------------------------------
-# Color helpers for index.html generation
+# Helpers
 # ---------------------------------------------------------------------------
 color_rgb() {
   case "$1" in
@@ -33,6 +33,28 @@ html_escape() {
   printf '%s' "$1" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g'
 }
 
+# Compute branch-specific dest filename.
+# Single-branch sources keep the original dest; multi-branch get a suffix.
+branch_dest() {
+  local dest="$1" branch="$2" num_branches="$3"
+  if [ "$num_branches" -le 1 ]; then
+    echo "$dest"
+  else
+    local base="${dest%.*}"
+    local ext="${dest##*.}"
+    echo "${base}-${branch}.${ext}"
+  fi
+}
+
+# Map branch name to a tag color for the index card.
+branch_color() {
+  case "$1" in
+    main)    echo "green" ;;
+    staging) echo "amber" ;;
+    *)       echo "accent" ;;
+  esac
+}
+
 # ---------------------------------------------------------------------------
 # 1. Pull playground files from each source repo
 # ---------------------------------------------------------------------------
@@ -43,42 +65,47 @@ unchanged_count=0
 num_sources=$(jq '.sources | length' "$SOURCES_FILE")
 for (( i=0; i<num_sources; i++ )); do
   repo=$(jq -r ".sources[$i].repo" "$SOURCES_FILE")
-  branch=$(jq -r ".sources[$i].branch // \"main\"" "$SOURCES_FILE")
+  num_branches=$(jq ".sources[$i].branches | length" "$SOURCES_FILE")
 
-  echo "==> Cloning $repo ($branch)..."
-  repo_dir="$TEMP_DIR/repo_$i"
-  if ! git clone --depth 1 --branch "$branch" "https://github.com/$repo.git" "$repo_dir" 2>/dev/null; then
-    echo "    WARNING: Failed to clone $repo — skipping"
-    continue
-  fi
+  for (( b=0; b<num_branches; b++ )); do
+    branch=$(jq -r ".sources[$i].branches[$b]" "$SOURCES_FILE")
 
-  num_files=$(jq ".sources[$i].files | length" "$SOURCES_FILE")
-  for (( j=0; j<num_files; j++ )); do
-    src=$(jq -r ".sources[$i].files[$j].src" "$SOURCES_FILE")
-    dest=$(jq -r ".sources[$i].files[$j].dest // empty" "$SOURCES_FILE")
-    [ -z "$dest" ] && dest=$(basename "$src")
-
-    src_path="$repo_dir/$src"
-    dest_path="$DOCS_DIR/$dest"
-
-    if [ ! -f "$src_path" ]; then
-      echo "    WARNING: $src not found in $repo"
+    echo "==> Cloning $repo ($branch)..."
+    repo_dir="$TEMP_DIR/repo_${i}_${b}"
+    if ! git clone --depth 1 --branch "$branch" "https://github.com/$repo.git" "$repo_dir" 2>/dev/null; then
+      echo "    Skipping — branch '$branch' not found"
       continue
     fi
 
-    if [ -f "$dest_path" ]; then
-      if diff -q "$src_path" "$dest_path" >/dev/null 2>&1; then
-        echo "    $dest — up to date"
-        unchanged_count=$((unchanged_count + 1))
-      else
-        echo "    $dest — updated"
-        updated_count=$((updated_count + 1))
+    num_files=$(jq ".sources[$i].files | length" "$SOURCES_FILE")
+    for (( j=0; j<num_files; j++ )); do
+      src=$(jq -r ".sources[$i].files[$j].src" "$SOURCES_FILE")
+      dest=$(jq -r ".sources[$i].files[$j].dest // empty" "$SOURCES_FILE")
+      [ -z "$dest" ] && dest=$(basename "$src")
+
+      bdest=$(branch_dest "$dest" "$branch" "$num_branches")
+      src_path="$repo_dir/$src"
+      dest_path="$DOCS_DIR/$bdest"
+
+      if [ ! -f "$src_path" ]; then
+        echo "    WARNING: $src not found in $repo ($branch)"
+        continue
       fi
-    else
-      echo "    $dest — added (new)"
-      new_count=$((new_count + 1))
-    fi
-    cp "$src_path" "$dest_path"
+
+      if [ -f "$dest_path" ]; then
+        if diff -q "$src_path" "$dest_path" >/dev/null 2>&1; then
+          echo "    $bdest — up to date"
+          unchanged_count=$((unchanged_count + 1))
+        else
+          echo "    $bdest — updated"
+          updated_count=$((updated_count + 1))
+        fi
+      else
+        echo "    $bdest — added (new)"
+        new_count=$((new_count + 1))
+      fi
+      cp "$src_path" "$dest_path"
+    done
   done
 done
 
@@ -217,25 +244,36 @@ cat > "$INDEX" << 'HTML_HEAD'
   <div class="cards">
 HTML_HEAD
 
-# --- Cards (one per playground file) --------------------------------------
+# --- Cards (one per playground file per branch) ------------------------------
 for (( i=0; i<num_sources; i++ )); do
+  num_branches=$(jq ".sources[$i].branches | length" "$SOURCES_FILE")
   num_files=$(jq ".sources[$i].files | length" "$SOURCES_FILE")
-  for (( j=0; j<num_files; j++ )); do
-    dest=$(jq -r ".sources[$i].files[$j].dest // empty" "$SOURCES_FILE")
-    [ -z "$dest" ] && dest=$(jq -r ".sources[$i].files[$j].src | split(\"/\")[-1]" "$SOURCES_FILE")
-    title=$(jq -r ".sources[$i].files[$j].title // \"Untitled\"" "$SOURCES_FILE")
-    desc=$(jq -r ".sources[$i].files[$j].description // \"\"" "$SOURCES_FILE")
-    icon=$(jq -r ".sources[$i].files[$j].icon // \"📄\"" "$SOURCES_FILE")
-    icon_color=$(jq -r ".sources[$i].files[$j].icon_color // \"accent\"" "$SOURCES_FILE")
 
-    icon_rgb=$(color_rgb "$icon_color")
-    escaped_title=$(html_escape "$title")
-    escaped_desc=$(html_escape "$desc")
+  for (( b=0; b<num_branches; b++ )); do
+    branch=$(jq -r ".sources[$i].branches[$b]" "$SOURCES_FILE")
 
-    # Open card
-    cat >> "$INDEX" <<CARD_OPEN
+    for (( j=0; j<num_files; j++ )); do
+      dest=$(jq -r ".sources[$i].files[$j].dest // empty" "$SOURCES_FILE")
+      [ -z "$dest" ] && dest=$(jq -r ".sources[$i].files[$j].src | split(\"/\")[-1]" "$SOURCES_FILE")
 
-    <a class="card" href="$dest">
+      bdest=$(branch_dest "$dest" "$branch" "$num_branches")
+
+      # Only emit a card if the file was actually synced
+      [ -f "$DOCS_DIR/$bdest" ] || continue
+
+      title=$(jq -r ".sources[$i].files[$j].title // \"Untitled\"" "$SOURCES_FILE")
+      desc=$(jq -r ".sources[$i].files[$j].description // \"\"" "$SOURCES_FILE")
+      icon=$(jq -r ".sources[$i].files[$j].icon // \"📄\"" "$SOURCES_FILE")
+      icon_color=$(jq -r ".sources[$i].files[$j].icon_color // \"accent\"" "$SOURCES_FILE")
+
+      icon_rgb=$(color_rgb "$icon_color")
+      escaped_title=$(html_escape "$title")
+      escaped_desc=$(html_escape "$desc")
+
+      # Open card
+      cat >> "$INDEX" <<CARD_OPEN
+
+    <a class="card" href="$bdest">
       <div class="card-top">
         <div class="card-icon" style="background:rgba($icon_rgb,0.1)">$icon</div>
         <div class="card-title">$escaped_title</div>
@@ -246,22 +284,30 @@ for (( i=0; i<num_sources; i++ )); do
       <div class="card-tags">
 CARD_OPEN
 
-    # Tags
-    num_tags=$(jq ".sources[$i].files[$j].tags | length" "$SOURCES_FILE")
-    for (( k=0; k<num_tags; k++ )); do
-      tag_label=$(jq -r ".sources[$i].files[$j].tags[$k].label" "$SOURCES_FILE")
-      tag_color=$(jq -r ".sources[$i].files[$j].tags[$k].color // \"accent\"" "$SOURCES_FILE")
-      tag_rgb=$(color_rgb "$tag_color")
-      escaped_label=$(html_escape "$tag_label")
-      echo "        <span class=\"tag\" style=\"background:rgba($tag_rgb,0.15);color:var(--$tag_color)\">$escaped_label</span>" >> "$INDEX"
-    done
+      # Branch tag (only for multi-branch sources)
+      if [ "$num_branches" -gt 1 ]; then
+        bcolor=$(branch_color "$branch")
+        brgb=$(color_rgb "$bcolor")
+        echo "        <span class=\"tag\" style=\"background:rgba($brgb,0.15);color:var(--$bcolor)\">$branch</span>" >> "$INDEX"
+      fi
 
-    # Close card
-    cat >> "$INDEX" << 'CARD_CLOSE'
+      # Content tags
+      num_tags=$(jq ".sources[$i].files[$j].tags | length" "$SOURCES_FILE")
+      for (( k=0; k<num_tags; k++ )); do
+        tag_label=$(jq -r ".sources[$i].files[$j].tags[$k].label" "$SOURCES_FILE")
+        tag_color=$(jq -r ".sources[$i].files[$j].tags[$k].color // \"accent\"" "$SOURCES_FILE")
+        tag_rgb=$(color_rgb "$tag_color")
+        escaped_label=$(html_escape "$tag_label")
+        echo "        <span class=\"tag\" style=\"background:rgba($tag_rgb,0.15);color:var(--$tag_color)\">$escaped_label</span>" >> "$INDEX"
+      done
+
+      # Close card
+      cat >> "$INDEX" << 'CARD_CLOSE'
       </div>
     </a>
 CARD_CLOSE
 
+    done
   done
 done
 

@@ -1,0 +1,2364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Intellilake — Dev Process & Architecture</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0f1117;
+    --surface: #181a20;
+    --surface2: #1e2028;
+    --border: #2a2d38;
+    --border-active: #4f46e5;
+    --text: #e2e4ea;
+    --text-dim: #8b8fa3;
+    --text-muted: #5c6078;
+    --accent: #6366f1;
+    --accent-dim: #4338ca;
+    --green: #22c55e;
+    --green-dim: #166534;
+    --blue: #3b82f6;
+    --blue-dim: #1e3a5f;
+    --amber: #f59e0b;
+    --amber-dim: #78350f;
+    --red: #ef4444;
+    --red-dim: #7f1d1d;
+    --purple: #a855f7;
+    --purple-dim: #581c87;
+    --cyan: #06b6d4;
+    --pink: #ec4899;
+    --orange: #f97316;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Header */
+  .header {
+    padding: 20px 28px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    background: var(--surface);
+  }
+  .header h1 {
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: -0.3px;
+  }
+  .header .subtitle {
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+  .logo {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, var(--accent), var(--cyan));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+
+  /* Tabs */
+  .tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    padding: 0 20px;
+    overflow-x: auto;
+  }
+  .tab {
+    padding: 12px 20px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-dim);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+    white-space: nowrap;
+    user-select: none;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+
+  /* Panels */
+  .panel { display: none; padding: 24px 28px; }
+  .panel.active { display: block; }
+
+  /* Section titles */
+  .section-title {
+    font-size: 14px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-dim);
+    margin-bottom: 16px;
+  }
+  .section-desc {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 20px;
+    line-height: 1.5;
+  }
+
+  /* ── MONOREPO TREE ── */
+  .tree-container {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 24px;
+  }
+  @media (max-width: 900px) {
+    .tree-container { grid-template-columns: 1fr; }
+  }
+
+  .tree {
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-size: 13px;
+    line-height: 1.8;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    overflow-x: auto;
+  }
+  .tree-node {
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: background 0.1s;
+  }
+  .tree-node:hover { background: var(--surface2); }
+  .tree-node.selected { background: rgba(99,102,241,0.12); }
+
+  .tree-indent { display: inline-block; width: 20px; flex-shrink: 0; }
+  .tree-icon { flex-shrink: 0; font-size: 14px; width: 18px; text-align: center; }
+  .tree-label { flex: 1; }
+  .tree-badge {
+    font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    font-size: 10px;
+    padding: 1px 7px;
+    border-radius: 10px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    flex-shrink: 0;
+  }
+  .badge-fe { background: var(--blue-dim); color: var(--blue); }
+  .badge-be { background: var(--green-dim); color: var(--green); }
+  .badge-data { background: var(--amber-dim); color: var(--amber); }
+  .badge-tech { background: var(--purple-dim); color: var(--purple); }
+  .badge-cross { background: rgba(99,102,241,0.15); color: var(--accent); }
+
+  .detail-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    position: sticky;
+    top: 20px;
+    max-height: calc(100vh - 180px);
+    overflow-y: auto;
+  }
+  .detail-panel h3 {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+  .detail-panel .path {
+    font-family: 'SF Mono', monospace;
+    font-size: 12px;
+    color: var(--accent);
+    margin-bottom: 12px;
+  }
+  .detail-panel .desc {
+    font-size: 13px;
+    color: var(--text-dim);
+    line-height: 1.6;
+    margin-bottom: 16px;
+  }
+  .detail-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    padding: 6px 0;
+    border-top: 1px solid var(--border);
+  }
+  .detail-row .label { color: var(--text-muted); }
+  .detail-row .value { font-weight: 500; }
+  .detail-files {
+    margin-top: 12px;
+    font-size: 12px;
+    color: var(--text-dim);
+    font-family: 'SF Mono', monospace;
+    line-height: 1.8;
+  }
+  .detail-files div { padding: 1px 0; }
+
+  /* ── GIT WORKFLOW ── */
+  .git-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+  @media (max-width: 900px) {
+    .git-container { grid-template-columns: 1fr; }
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+  }
+  .card h3 {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  /* Branch diagram */
+  .branch-diagram {
+    position: relative;
+    padding: 16px 0;
+  }
+  .branch-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 0;
+  }
+  .branch-line {
+    width: 4px;
+    height: 40px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+  .branch-dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    border: 2px solid;
+  }
+  .branch-info { flex: 1; }
+  .branch-name {
+    font-family: 'SF Mono', monospace;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .branch-desc {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 2px;
+  }
+  .branch-badge {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 600;
+  }
+
+  /* Arrow connectors */
+  .flow-arrow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0 4px 20px;
+    color: var(--text-muted);
+    font-size: 11px;
+  }
+  .flow-arrow svg { flex-shrink: 0; }
+
+  /* Linear workflow */
+  .linear-flow {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+  .linear-state {
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: 2px solid transparent;
+    user-select: none;
+  }
+  .linear-state.active-state {
+    border-color: currentColor;
+    transform: scale(1.05);
+  }
+  .linear-arrow {
+    display: flex;
+    align-items: center;
+    color: var(--text-muted);
+    font-size: 16px;
+  }
+  .state-backlog { background: rgba(99,102,241,0.1); color: var(--text-dim); }
+  .state-todo { background: rgba(99,102,241,0.15); color: var(--accent); }
+  .state-progress { background: rgba(245,158,11,0.15); color: var(--amber); }
+  .state-review { background: rgba(59,130,246,0.15); color: var(--blue); }
+  .state-done { background: rgba(34,197,94,0.15); color: var(--green); }
+
+  .state-detail {
+    font-size: 12px;
+    color: var(--text-dim);
+    line-height: 1.6;
+    padding: 12px;
+    background: var(--surface2);
+    border-radius: 8px;
+    min-height: 52px;
+  }
+
+  /* ── TENANT CONFIG ── */
+  .tenant-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+  @media (max-width: 900px) {
+    .tenant-grid { grid-template-columns: 1fr; }
+  }
+
+  .tenant-switch {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .tenant-btn {
+    flex: 1;
+    padding: 10px;
+    border: 2px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface2);
+    color: var(--text-dim);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.15s;
+  }
+  .tenant-btn.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(99,102,241,0.08);
+  }
+  .tenant-btn:hover:not(.active) {
+    border-color: var(--text-muted);
+    color: var(--text);
+  }
+
+  .config-json {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 12px;
+    line-height: 1.7;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    overflow-x: auto;
+    white-space: pre;
+  }
+  .json-key { color: var(--cyan); }
+  .json-string { color: var(--green); }
+  .json-bool { color: var(--amber); }
+  .json-comment { color: var(--text-muted); font-style: italic; }
+
+  .deploy-model {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .deploy-btn {
+    flex: 1;
+    padding: 10px;
+    border: 2px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface2);
+    color: var(--text-dim);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.15s;
+  }
+  .deploy-btn.active {
+    border-color: var(--green);
+    color: var(--green);
+    background: rgba(34,197,94,0.08);
+  }
+
+  .deploy-detail {
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--text-dim);
+    background: var(--surface2);
+    border-radius: 8px;
+    padding: 14px;
+  }
+  .deploy-detail strong { color: var(--text); }
+
+  /* Architecture diagram */
+  .arch-diagram {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: center;
+    padding: 16px 0;
+  }
+  .arch-layer {
+    width: 100%;
+    max-width: 400px;
+    padding: 12px 16px;
+    border-radius: 8px;
+    border: 1px solid;
+    text-align: center;
+    font-size: 12px;
+    font-weight: 600;
+    transition: all 0.3s;
+  }
+  .arch-arrow-down {
+    color: var(--text-muted);
+    font-size: 18px;
+    line-height: 1;
+  }
+
+  /* ── CYCLE ── */
+  .cycle-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+  @media (max-width: 900px) {
+    .cycle-container { grid-template-columns: 1fr; }
+  }
+
+  .week-track {
+    display: flex;
+    gap: 0;
+    margin-bottom: 20px;
+  }
+  .day-block {
+    flex: 1;
+    padding: 12px 8px;
+    text-align: center;
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition: all 0.15s;
+    user-select: none;
+  }
+  .day-block:first-child { border-radius: 8px 0 0 8px; }
+  .day-block:last-child { border-radius: 0 8px 8px 0; }
+  .day-block:hover { background: var(--surface2); }
+  .day-block.active-day { background: rgba(99,102,241,0.12); border-color: var(--accent); z-index: 1; position: relative; }
+  .day-block.event-day { border-bottom: 3px solid var(--accent); }
+  .day-name { font-size: 11px; font-weight: 600; color: var(--text-dim); margin-bottom: 4px; }
+  .day-label { font-size: 10px; color: var(--text-muted); }
+  .day-event {
+    font-size: 9px;
+    margin-top: 6px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 600;
+  }
+
+  .cycle-detail-card {
+    background: var(--surface2);
+    border-radius: 8px;
+    padding: 14px;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--text-dim);
+    min-height: 80px;
+  }
+  .cycle-detail-card h4 {
+    font-size: 13px;
+    color: var(--text);
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+
+  /* Teams table */
+  .teams-grid {
+    display: grid;
+    gap: 8px;
+  }
+  .team-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    background: var(--surface2);
+    border-radius: 8px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+  .team-row:hover { background: rgba(99,102,241,0.08); }
+  .team-row.active-team { background: rgba(99,102,241,0.12); border: 1px solid var(--accent); }
+  .team-key {
+    font-family: 'SF Mono', monospace;
+    font-weight: 700;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    min-width: 36px;
+    text-align: center;
+  }
+  .team-name { font-weight: 600; flex: 1; }
+  .team-scope { color: var(--text-muted); font-size: 11px; }
+
+  /* Labels showcase */
+  .labels-group {
+    margin-bottom: 12px;
+  }
+  .labels-group-name {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+  }
+  .labels-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .label-chip {
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-weight: 500;
+    cursor: default;
+  }
+  .label-type { background: rgba(168,85,247,0.15); color: var(--purple); }
+  .label-domain { background: rgba(6,182,212,0.15); color: var(--cyan); }
+  .label-status { background: rgba(239,68,68,0.15); color: var(--red); }
+  .label-scope { background: rgba(34,197,94,0.15); color: var(--green); }
+
+  /* Prompt output */
+  .prompt-section {
+    margin-top: 32px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 20px;
+  }
+  .prompt-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+  .prompt-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+  }
+  .copy-btn {
+    padding: 5px 14px;
+    font-size: 11px;
+    font-weight: 600;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface2);
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .copy-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .copy-btn.copied { border-color: var(--green); color: var(--green); }
+  .prompt-text {
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-dim);
+    white-space: pre-wrap;
+  }
+
+  /* Animations */
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+  .animating { animation: pulse 1.5s ease-in-out infinite; }
+
+  /* Full-width card */
+  .card-full {
+    grid-column: 1 / -1;
+  }
+
+  /* Detail panel enhancements */
+  .detail-why {
+    margin-top: 12px;
+    padding: 10px 12px;
+    background: var(--surface2);
+    border-radius: 8px;
+    border-left: 3px solid var(--accent);
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--text-dim);
+  }
+  .detail-why-label {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--accent);
+    margin-bottom: 4px;
+  }
+  .detail-interacts {
+    margin-top: 10px;
+  }
+  .detail-interacts-label {
+    font-family: -apple-system, system-ui, sans-serif;
+    font-weight: 600;
+    color: var(--text-muted);
+    font-size: 11px;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .interact-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 5px 0;
+    font-size: 11px;
+    line-height: 1.5;
+    color: var(--text-dim);
+  }
+  .interact-arrow {
+    color: var(--text-muted);
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  .interact-target {
+    color: var(--accent);
+    font-weight: 500;
+  }
+
+  /* Monorepo intro */
+  .monorepo-intro {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin-bottom: 20px;
+    font-size: 12px;
+    line-height: 1.7;
+    color: var(--text-dim);
+  }
+  .monorepo-intro strong { color: var(--text); }
+  .monorepo-layers {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-top: 12px;
+  }
+  @media (max-width: 800px) { .monorepo-layers { grid-template-columns: 1fr; } }
+  .layer-card {
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    font-size: 11px;
+    line-height: 1.5;
+  }
+  .layer-card-title {
+    font-weight: 600;
+    margin-bottom: 4px;
+    font-size: 12px;
+  }
+
+  /* Decision cards */
+  .decision-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 12px;
+    overflow: hidden;
+    transition: border-color 0.15s;
+  }
+  .decision-card:hover { border-color: var(--text-muted); }
+  .decision-header {
+    padding: 16px 20px;
+    cursor: pointer;
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    user-select: none;
+  }
+  .decision-status {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-top: 4px;
+    flex-shrink: 0;
+  }
+  .status-confirmed { background: var(--green); box-shadow: 0 0 6px rgba(34,197,94,0.4); }
+  .status-proposed { background: var(--amber); box-shadow: 0 0 6px rgba(245,158,11,0.4); }
+  .status-deferred { background: var(--text-muted); }
+  .decision-title {
+    font-size: 14px;
+    font-weight: 600;
+    flex: 1;
+  }
+  .decision-subtitle {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 2px;
+  }
+  .decision-chevron {
+    color: var(--text-muted);
+    font-size: 14px;
+    transition: transform 0.2s;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .decision-card.expanded .decision-chevron { transform: rotate(90deg); }
+  .decision-body {
+    display: none;
+    padding: 0 20px 16px 44px;
+    font-size: 12px;
+    line-height: 1.7;
+    color: var(--text-dim);
+  }
+  .decision-card.expanded .decision-body { display: block; }
+  .decision-body h4 {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    margin: 12px 0 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+  .decision-body h4:first-child { margin-top: 0; }
+  .alt-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  @media (max-width: 700px) { .alt-grid { grid-template-columns: 1fr; } }
+  .alt-option {
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+  }
+  .alt-option.chosen {
+    border-color: var(--green);
+    background: rgba(34,197,94,0.06);
+  }
+  .alt-option.rejected {
+    opacity: 0.6;
+  }
+  .alt-option-title {
+    font-weight: 600;
+    font-size: 11px;
+    margin-bottom: 4px;
+  }
+  .alt-option.chosen .alt-option-title { color: var(--green); }
+  .alt-option-desc { font-size: 11px; color: var(--text-muted); }
+  .decision-adr {
+    margin-top: 10px;
+    font-size: 11px;
+    color: var(--accent);
+    font-family: 'SF Mono', monospace;
+  }
+
+  /* Pipeline visualization */
+  .env-switch {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+  }
+  .env-btn {
+    flex: 1;
+    padding: 12px 10px;
+    border: 2px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface2);
+    color: var(--text-dim);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.15s;
+  }
+  .env-btn:hover:not(.active) { border-color: var(--text-muted); color: var(--text); }
+  .env-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(99,102,241,0.08); }
+  .env-btn .env-btn-sub { font-size: 10px; font-weight: 400; color: var(--text-muted); margin-top: 2px; }
+  .env-btn.active .env-btn-sub { color: var(--accent); opacity: 0.7; }
+
+  .pipeline-stages {
+    display: flex;
+    gap: 0;
+    overflow-x: auto;
+    padding-bottom: 8px;
+    margin-bottom: 16px;
+  }
+  .pipeline-stage {
+    flex: 1;
+    min-width: 120px;
+    padding: 12px 10px;
+    text-align: center;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.15s;
+    position: relative;
+  }
+  .pipeline-stage:first-child { border-radius: 8px 0 0 8px; }
+  .pipeline-stage:last-child { border-radius: 0 8px 8px 0; }
+  .pipeline-stage:hover { background: rgba(99,102,241,0.06); }
+  .pipeline-stage.active-stage { background: rgba(99,102,241,0.1); border-color: var(--accent); z-index: 1; }
+  .pipeline-stage-name { font-weight: 600; margin-bottom: 2px; }
+  .pipeline-stage-tool { font-size: 10px; color: var(--text-muted); }
+  .pipeline-stage::after {
+    content: '→';
+    position: absolute;
+    right: -7px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+    font-size: 12px;
+    z-index: 2;
+  }
+  .pipeline-stage:last-child::after { content: ''; }
+
+  .pipeline-detail {
+    background: var(--surface2);
+    border-radius: 8px;
+    padding: 14px 16px;
+    font-size: 12px;
+    line-height: 1.7;
+    color: var(--text-dim);
+    min-height: 80px;
+  }
+  .pipeline-detail h4 {
+    font-size: 13px;
+    color: var(--text);
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+  .pipeline-detail code {
+    font-size: 11px;
+    background: var(--bg);
+    padding: 1px 6px;
+    border-radius: 3px;
+    color: var(--accent);
+  }
+
+  .env-diagram {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 4px 0;
+  }
+  .env-layer {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    font-size: 11px;
+    line-height: 1.4;
+  }
+  .env-layer-icon { font-size: 16px; flex-shrink: 0; width: 24px; text-align: center; }
+  .env-layer-name { font-weight: 600; min-width: 100px; flex-shrink: 0; }
+  .env-layer-desc { color: var(--text-dim); flex: 1; }
+  .env-layer-arrow {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 14px;
+    padding: 0 0 0 34px;
+  }
+
+  .pipeline-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+  @media (max-width: 900px) { .pipeline-grid { grid-template-columns: 1fr; } }
+
+  /* Glossary tooltips */
+  .glossary-term {
+    border-bottom: 1px dashed var(--text-muted);
+    cursor: help;
+    position: relative;
+  }
+  .glossary-tip {
+    display: none;
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 11px;
+    line-height: 1.5;
+    color: var(--text-dim);
+    width: 280px;
+    z-index: 100;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    pointer-events: none;
+  }
+  .glossary-tip .tip-term {
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+  .glossary-term:hover .glossary-tip { display: block; }
+
+  /* Glossary footer */
+  .glossary-footer {
+    margin-top: 24px;
+    padding: 20px 28px;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .glossary-toggle {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-dim);
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .glossary-toggle:hover { color: var(--text); }
+  .glossary-content {
+    display: none;
+    margin-top: 16px;
+    columns: 2;
+    column-gap: 32px;
+    font-size: 12px;
+  }
+  @media (max-width: 700px) { .glossary-content { columns: 1; } }
+  .glossary-content.open { display: block; }
+  .glossary-entry {
+    break-inside: avoid;
+    margin-bottom: 12px;
+    line-height: 1.5;
+  }
+  .glossary-entry dt {
+    font-weight: 600;
+    color: var(--text);
+    font-size: 12px;
+  }
+  .glossary-entry dd {
+    color: var(--text-dim);
+    font-size: 11px;
+    margin-left: 0;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo">IL</div>
+  <div>
+    <h1>Intellilake — Dev Process & Architecture</h1>
+    <div class="subtitle">Multi-tenant platform development environment</div>
+  </div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" data-tab="decisions">Architecture Decisions</div>
+  <div class="tab" data-tab="monorepo">Monorepo Structure</div>
+  <div class="tab" data-tab="workflow">Git & Linear Workflow</div>
+  <div class="tab" data-tab="tenant">Tenant Configuration</div>
+  <div class="tab" data-tab="pipeline">CI/CD & Environments</div>
+  <div class="tab" data-tab="cycle">Sprint Cycle & Teams</div>
+</div>
+
+<!-- ═══════════════════════════════════════ -->
+<!-- DECISIONS PANEL -->
+<!-- ═══════════════════════════════════════ -->
+<div class="panel active" id="panel-decisions">
+  <div class="section-title">Architecture Decisions & Rationale</div>
+  <div class="section-desc">Confirmed decisions from diagram review. Click any decision to expand the reasoning and alternatives considered.</div>
+  <div id="decisions-list"></div>
+</div>
+
+<!-- ═══════════════════════════════════════ -->
+<!-- MONOREPO PANEL -->
+<!-- ═══════════════════════════════════════ -->
+<div class="panel" id="panel-monorepo">
+  <div class="section-title">Monorepo Folder Structure</div>
+  <div class="section-desc">Click any folder to see why it exists, what it contains, and how it connects to other layers.</div>
+
+  <div class="monorepo-intro">
+    <strong>Why a monorepo?</strong> All code — frontend, backend, shared contracts, infrastructure, and documentation — lives in a single repository. This means a single Pull Request can change the API response format and the frontend that consumes it in one atomic commit. No cross-repo coordination, no version mismatches.
+    <div class="monorepo-layers">
+      <div class="layer-card">
+        <div class="layer-card-title" style="color:var(--blue)">apps/ — Deployable Services</div>
+        Two services that run in production: the <strong>Next.js frontend</strong> users interact with and the <strong>FastAPI backend</strong> that processes data. Each uses its own language toolchain (Turborepo for TS, uv for Python) but they deploy together.
+      </div>
+      <div class="layer-card">
+        <div class="layer-card-title" style="color:var(--amber)">contracts/ — The Bridge</div>
+        <strong>Language-neutral JSON files</strong> that both apps consume. This is the only folder truly shared between Python and TypeScript. Tenant configs, auth provider settings, and JSON Schemas live here. When you change a feature flag, both apps see it.
+      </div>
+      <div class="layer-card">
+        <div class="layer-card-title" style="color:var(--purple)">packages/ — TS-Only Libraries</div>
+        Shared React components and auto-generated TypeScript types. These are <strong>only used by the frontend</strong> — the Python API cannot import them. The API contract flows the other direction: FastAPI generates OpenAPI → TS types are generated from it.
+      </div>
+    </div>
+    <div class="monorepo-layers" style="margin-top:8px">
+      <div class="layer-card">
+        <div class="layer-card-title" style="color:var(--green)">data/ — Database Definitions</div>
+        Snowflake schemas and Mongo cache configs. These define the <strong>data structures</strong> the API layer queries against. Changes here ripple up: schema change → API adapts → frontend types regenerate.
+      </div>
+      <div class="layer-card">
+        <div class="layer-card-title" style="color:var(--cyan)">infra/ — How It Runs</div>
+        Dockerfiles build the container images. CI pipelines test both languages and validate all tenant configs. Terraform provisions the AWS infrastructure. This layer <strong>wraps everything above</strong> into deployable, testable artifacts.
+      </div>
+      <div class="layer-card">
+        <div class="layer-card-title" style="color:var(--text-dim)">docs/ — Why We Did It</div>
+        Architecture Decision Records capture the <strong>reasoning behind choices</strong> (not just what was chosen). Runbooks document operational procedures. User-facing docs ship inside the app container so each client sees docs matching their version.
+      </div>
+    </div>
+  </div>
+
+  <div class="tree-container">
+    <div class="tree" id="tree"></div>
+    <div class="detail-panel" id="detail-panel">
+      <h3 id="detail-name">intellilake/</h3>
+      <div class="path" id="detail-path">/</div>
+      <div class="desc" id="detail-desc">Polyglot monorepo — TypeScript (Next.js) + Python (FastAPI). Turborepo orchestrates TS workspace; uv manages Python. Cross-language sharing via JSON contracts and OpenAPI specs, not runtime code.</div>
+      <div id="detail-meta"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════ -->
+<!-- WORKFLOW PANEL -->
+<!-- ═══════════════════════════════════════ -->
+<div class="panel" id="panel-workflow">
+  <div class="section-title">Git & Linear Workflow</div>
+  <div class="section-desc">Branch strategy and issue lifecycle. Click a workflow state to see details.</div>
+  <div class="git-container">
+
+    <div class="card">
+      <h3>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M11.75 2.5a.75.75 0 100 1.5.75.75 0 000-1.5zm-2.25.75a2.25 2.25 0 113 2.122V6a2.5 2.5 0 01-2.5 2.5H7.5v2.128a2.251 2.251 0 11-1.5 0V5.372a2.25 2.25 0 111.5 0v1.836A4 4 0 009.5 7h.5A1 1 0 0011 6v-.628A2.25 2.25 0 019.5 3.25zM4.25 12a.75.75 0 100 1.5.75.75 0 000-1.5zM3.5 3.25a.75.75 0 111.5 0 .75.75 0 01-1.5 0z"/></svg>
+        Branch Strategy
+      </h3>
+      <div class="branch-diagram">
+        <div class="branch-row">
+          <div class="branch-dot" style="border-color:var(--green); background:var(--green-dim)"></div>
+          <div class="branch-info">
+            <div class="branch-name" style="color:var(--green)">main</div>
+            <div class="branch-desc">Production — always deployable</div>
+          </div>
+          <span class="branch-badge" style="background:var(--green-dim);color:var(--green)">PROTECTED</span>
+        </div>
+        <div class="flow-arrow">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><path d="M6 1v8M3 6l3 3 3-3"/></svg>
+          Tech lead promotes on cadence
+        </div>
+        <div class="branch-row">
+          <div class="branch-dot" style="border-color:var(--blue); background:var(--blue-dim)"></div>
+          <div class="branch-info">
+            <div class="branch-name" style="color:var(--blue)">staging</div>
+            <div class="branch-desc">Integration + validation</div>
+          </div>
+          <span class="branch-badge" style="background:var(--blue-dim);color:var(--blue)">PROTECTED</span>
+        </div>
+        <div class="flow-arrow">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><path d="M6 1v8M3 6l3 3 3-3"/></svg>
+          Leads approve PRs
+        </div>
+        <div class="branch-row">
+          <div class="branch-dot" style="border-color:var(--purple); background:var(--purple-dim)"></div>
+          <div class="branch-info">
+            <div class="branch-name" style="color:var(--purple)">feat/API-42-auth-flow</div>
+            <div class="branch-desc">Short-lived (1–3 days max)</div>
+          </div>
+          <span class="branch-badge" style="background:var(--purple-dim);color:var(--purple)">FEATURE</span>
+        </div>
+      </div>
+      <div style="margin-top:12px; padding:12px; background:var(--surface2); border-radius:8px; font-size:11px; color:var(--text-dim); line-height:1.6">
+        <strong style="color:var(--text)">Rules:</strong> One issue = one branch = one PR. Always rebase from staging. Never push directly to main or staging.
+        <br><strong style="color:var(--text)">Naming:</strong> <code style="color:var(--accent)">feat/</code> <code style="color:var(--green)">fix/</code> <code style="color:var(--amber)">chore/</code> + <code style="color:var(--text-dim)">TEAM-N-description</code>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0a8 8 0 110 16A8 8 0 018 0zm0 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM8 4a.75.75 0 01.75.75v3.19l2.03 2.03a.75.75 0 11-1.06 1.06L7.47 8.78A.75.75 0 017.25 8V4.75A.75.75 0 018 4z"/></svg>
+        Linear Issue Lifecycle
+      </h3>
+      <div class="linear-flow" id="linear-flow">
+        <div class="linear-state state-backlog active-state" data-state="backlog" onclick="selectState('backlog')">Backlog</div>
+        <div class="linear-arrow">→</div>
+        <div class="linear-state state-todo" data-state="todo" onclick="selectState('todo')">Todo</div>
+        <div class="linear-arrow">→</div>
+        <div class="linear-state state-progress" data-state="progress" onclick="selectState('progress')">In Progress</div>
+        <div class="linear-arrow">→</div>
+        <div class="linear-state state-review" data-state="review" onclick="selectState('review')">In Review</div>
+        <div class="linear-arrow">→</div>
+        <div class="linear-state state-done" data-state="done" onclick="selectState('done')">Done</div>
+      </div>
+      <div class="state-detail" id="state-detail">
+        <strong>Backlog</strong> — Unscheduled work. May or may not happen. Issues live here until pulled into a cycle by the tech lead on Monday.
+      </div>
+      <div style="margin-top:16px">
+        <h3 style="font-size:13px; margin-bottom:10px">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" style="vertical-align:-2px"><path d="M8 4a4 4 0 100 8 4 4 0 000-8z"/></svg>
+          PR → Linear Automation
+        </h3>
+        <div style="font-size:12px; color:var(--text-dim); line-height:1.8">
+          <div><code style="color:var(--blue)">PR opened</code> → Issue moves to <strong style="color:var(--blue)">In Review</strong></div>
+          <div><code style="color:var(--green)">PR merged to staging</code> → Issue moves to <strong style="color:var(--green)">Done</strong></div>
+          <div><code style="color:var(--purple)">Branch created from Linear</code> → Auto-named <code style="color:var(--purple)">feat/TEAM-N-desc</code></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card card-full">
+      <h3>Daily Dev Workflow</h3>
+      <div id="dev-workflow" style="display:flex; gap:6px; flex-wrap:wrap; align-items:center"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════ -->
+<!-- TENANT CONFIG PANEL -->
+<!-- ═══════════════════════════════════════ -->
+<div class="panel" id="panel-tenant">
+  <div class="section-title">Multi-Tenant Configuration</div>
+  <div class="section-desc">Two config sources merge at startup. Select a tenant to see what lives where and how changes flow from a dev's branch to production.</div>
+
+  <!-- Config split explainer -->
+  <div class="monorepo-intro" style="margin-bottom:20px">
+    <strong>The Config Split — why two sources?</strong> Financial clients require that credentials never appear in source control. But feature flags and branding need PR review and staging validation before they reach production. So config is split by concern: non-secret config lives in the repo (reviewable, testable), secrets live in AWS Secrets Manager (secure, auditable). At container startup, the app merges both into a single runtime config object.
+    <div class="monorepo-layers" style="margin-top:12px">
+      <div class="layer-card" style="border-left:3px solid var(--green)">
+        <div class="layer-card-title" style="color:var(--green)">Repo JSON — Developer Managed</div>
+        <strong>What:</strong> Feature flags, branding (logo, colors, theme), UI layout, nav items, auth provider choice, Snowflake account ID (not password).<br>
+        <strong>Where:</strong> <code style="color:var(--accent);font-size:11px">contracts/tenant-configs/millennium.json</code><br>
+        <strong>Changed by:</strong> Developer edits file on feature branch → PR review → CI validates against schema → merge to staging → tested → promoted to main.<br>
+        <strong>Why here:</strong> These are not sensitive. They need review, version history, and testing before reaching clients.
+      </div>
+      <div class="layer-card" style="border-left:3px solid var(--amber)">
+        <div class="layer-card-title" style="color:var(--amber)">AWS Secrets Manager — Ops Managed</div>
+        <strong>What:</strong> Snowflake password, database connection strings, API keys, auth provider secrets, cache connection strings.<br>
+        <strong>Where:</strong> AWS Secrets Manager, one secret per client per environment (dev/staging/prod).<br>
+        <strong>Changed by:</strong> Tech lead or DevOps via AWS console/CLI. IAM role per container restricts access to only that client's secret.<br>
+        <strong>Why here:</strong> These are sensitive credentials. Never in source control. AWS provides rotation, audit trail, and encryption at rest.
+      </div>
+      <div class="layer-card" style="border-left:3px solid var(--accent)">
+        <div class="layer-card-title" style="color:var(--accent)">Runtime Merge — At Container Startup</div>
+        <strong>Step 1:</strong> Container starts, reads <code style="color:var(--green);font-size:11px">contracts/tenant-configs/{client}.json</code> from disk (baked into image).<br>
+        <strong>Step 2:</strong> Fetches secret from AWS Secrets Manager via IAM role.<br>
+        <strong>Step 3:</strong> Merges both into a single config object. App code reads from this merged object — never from either source directly.<br>
+        <strong>Result:</strong> <code style="font-size:11px;color:var(--text-dim)">config.features.bulk_export</code> comes from repo JSON. <code style="font-size:11px;color:var(--text-dim)">config.snowflake.password</code> comes from Secrets Manager. App doesn't know or care which source.
+      </div>
+    </div>
+  </div>
+
+  <!-- Tenant selector + config views -->
+  <div class="tenant-switch" id="tenant-switch" style="margin-bottom:16px">
+    <div class="tenant-btn active" data-tenant="millennium" onclick="selectTenant('millennium')">Millennium (MLP)</div>
+    <div class="tenant-btn" data-tenant="kkr" onclick="selectTenant('kkr')">KKR</div>
+    <div class="tenant-btn" data-tenant="future" onclick="selectTenant('future')">Future Client</div>
+  </div>
+
+  <div class="tenant-grid">
+    <div class="card">
+      <h3 style="color:var(--green)">Repo JSON — PR Reviewable</h3>
+      <div class="config-json" id="tenant-json"></div>
+    </div>
+    <div class="card">
+      <h3 style="color:var(--amber)">AWS Secrets Manager — Secure</h3>
+      <div class="config-json" id="secrets-json"></div>
+    </div>
+  </div>
+
+  <!-- Dev workflow for config changes -->
+  <div class="card" style="margin-top:16px">
+    <h3>How a Developer Changes Config</h3>
+    <div id="config-workflow"></div>
+  </div>
+
+  <div class="tenant-grid" style="margin-top:16px">
+    <div class="card">
+      <h3>Deployment Model</h3>
+      <div class="deploy-model" id="deploy-model">
+        <div class="deploy-btn active" data-model="saas" onclick="selectDeploy('saas')">Multi-tenant SaaS</div>
+        <div class="deploy-btn" data-model="dedicated" onclick="selectDeploy('dedicated')">Dedicated Instance</div>
+      </div>
+      <div class="deploy-detail" id="deploy-detail"></div>
+    </div>
+    <div class="card">
+      <h3>Architecture Flow</h3>
+      <div class="arch-diagram" id="arch-diagram"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════ -->
+<!-- PIPELINE PANEL -->
+<!-- ═══════════════════════════════════════ -->
+<div class="panel" id="panel-pipeline">
+  <div class="section-title">CI/CD Pipeline & Environments</div>
+  <div class="section-desc">Select an environment to see its topology, then click pipeline stages to see what runs at each step.</div>
+
+  <div class="env-switch" id="env-switch">
+    <div class="env-btn active" data-env="local" onclick="selectEnv('local')">Local Dev<div class="env-btn-sub">Developer machine</div></div>
+    <div class="env-btn" data-env="ci" onclick="selectEnv('ci')">CI Pipeline<div class="env-btn-sub">GitHub Actions</div></div>
+    <div class="env-btn" data-env="staging" onclick="selectEnv('staging')">Staging<div class="env-btn-sub">Integration</div></div>
+    <div class="env-btn" data-env="production" onclick="selectEnv('production')">Production<div class="env-btn-sub">Client-facing</div></div>
+  </div>
+
+  <div class="pipeline-grid">
+    <div class="card">
+      <h3 id="env-title">Local Development</h3>
+      <div id="env-diagram"></div>
+    </div>
+    <div class="card">
+      <h3 id="pipeline-title">Pipeline</h3>
+      <div id="pipeline-stages"></div>
+      <div class="pipeline-detail" id="pipeline-detail"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════ -->
+<!-- CYCLE PANEL -->
+<!-- ═══════════════════════════════════════ -->
+<div class="panel" id="panel-cycle">
+  <div class="section-title">Sprint Cycle & Teams</div>
+  <div class="section-desc">1-week cycles. Monday planning, Wednesday check, Friday close. Click a day to see activities.</div>
+  <div class="cycle-container">
+
+    <div class="card">
+      <h3>Weekly Cycle</h3>
+      <div class="week-track" id="week-track"></div>
+      <div class="cycle-detail-card" id="cycle-detail"></div>
+
+      <h3 style="margin-top:20px">Rollover Rules</h3>
+      <div style="font-size:12px; line-height:1.8; color:var(--text-dim); padding:12px; background:var(--surface2); border-radius:8px">
+        <div>Issue can roll to next cycle <strong style="color:var(--text)">once</strong>.</div>
+        <div>If it rolls a second time → break it down or send to Backlog.</div>
+        <div style="margin-top:8px"><strong style="color:var(--text)">Backlog hygiene:</strong> Every 4 cycles, review and archive.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Teams</h3>
+      <div class="teams-grid" id="teams-grid"></div>
+
+      <h3 style="margin-top:20px">Labels</h3>
+      <div id="labels-showcase"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════ -->
+<!-- PROMPT OUTPUT -->
+<!-- ═══════════════════════════════════════ -->
+<div style="padding:0 28px 28px">
+  <div class="prompt-section">
+    <div class="prompt-header">
+      <span class="prompt-label">Prompt Output</span>
+      <button class="copy-btn" id="copy-btn" onclick="copyPrompt()">Copy</button>
+    </div>
+    <div class="prompt-text" id="prompt-output"></div>
+  </div>
+</div>
+
+<!-- GLOSSARY FOOTER -->
+<div class="glossary-footer">
+  <div class="glossary-toggle" onclick="toggleGlossary()">
+    <span id="glossary-chevron">▸</span> Terminology Glossary — for executive and non-technical readers
+  </div>
+  <div class="glossary-content" id="glossary-content">
+    <dl>
+      <div class="glossary-entry"><dt>Monorepo</dt><dd>A single code repository that contains all of the project's code (frontend, backend, infrastructure) instead of splitting them into separate repositories. Simplifies coordination and ensures everything stays in sync.</dd></div>
+      <div class="glossary-entry"><dt>Container / Docker</dt><dd>A lightweight, portable package that bundles an application with everything it needs to run. Think of it as a self-contained box that runs the same way everywhere — on a developer's laptop or in production.</dd></div>
+      <div class="glossary-entry"><dt>Container-per-client</dt><dd>Each client gets their own running copy of the application (container), even though they all use the same underlying code. This provides data isolation — one client's container cannot access another client's data.</dd></div>
+      <div class="glossary-entry"><dt>IAM Role</dt><dd>An AWS security identity that controls what resources a container can access. Each client's container gets a unique IAM role that only permits access to that client's secrets and data.</dd></div>
+      <div class="glossary-entry"><dt>AWS Secrets Manager</dt><dd>A secure vault service from Amazon that stores passwords, API keys, and connection credentials. The application retrieves these at startup instead of storing them in code files — critical for financial compliance.</dd></div>
+      <div class="glossary-entry"><dt>Feature Flags</dt><dd>On/off switches in configuration that control which features are available to which clients. Allows the same codebase to show different capabilities per client without separate code.</dd></div>
+      <div class="glossary-entry"><dt>Tenant</dt><dd>A client or customer who uses the platform. In a multi-tenant system, multiple tenants share the same software but each sees only their own data and configuration.</dd></div>
+      <div class="glossary-entry"><dt>FastAPI</dt><dd>A modern Python framework for building web APIs (the backend). It automatically generates documentation and is designed for high performance.</dd></div>
+      <div class="glossary-entry"><dt>Next.js</dt><dd>A React-based framework for building the web frontend (what users see and interact with in their browser).</dd></div>
+      <div class="glossary-entry"><dt>ShadCN</dt><dd>A pre-built component library (buttons, tables, forms, etc.) for React applications. Provides a consistent, professional look without designing every element from scratch.</dd></div>
+      <div class="glossary-entry"><dt>Snowflake</dt><dd>A cloud-based data warehouse where all client financial data is stored. Each client gets a separate Snowflake account for complete data isolation.</dd></div>
+      <div class="glossary-entry"><dt>OpenAPI / API Contract</dt><dd>A standardized description of what the backend API offers — like a menu. The frontend reads this to know exactly what data it can request and what format it will arrive in.</dd></div>
+      <div class="glossary-entry"><dt>Turborepo</dt><dd>A build tool that speeds up development by intelligently caching and only rebuilding what changed. Manages the TypeScript/JavaScript side of the monorepo.</dd></div>
+      <div class="glossary-entry"><dt>uv</dt><dd>A fast Python package manager that handles installing and managing Python dependencies. Manages the Python/FastAPI side of the monorepo.</dd></div>
+      <div class="glossary-entry"><dt>PR (Pull Request)</dt><dd>A formal request to merge code changes into the main project. Other team members review the changes before they're approved — like a quality gate before changes go live.</dd></div>
+      <div class="glossary-entry"><dt>CI/CD Pipeline</dt><dd>Automated processes that build, test, and deploy code whenever changes are made. Catches errors before they reach production and automates the release process.</dd></div>
+      <div class="glossary-entry"><dt>ADR (Architecture Decision Record)</dt><dd>A written document that captures an important technical decision, the options considered, and why the chosen approach was selected. Creates an audit trail for architectural choices.</dd></div>
+      <div class="glossary-entry"><dt>Linear</dt><dd>A lightweight project management tool (replacing Jira) used to track tasks, bugs, and feature work across all teams.</dd></div>
+      <div class="glossary-entry"><dt>Component Registry</dt><dd>A central catalog that maps component names (like "DataGrid" or "Chart") to actual UI code. When configuration says "show a DataGrid here," the registry looks up and renders the right component.</dd></div>
+      <div class="glossary-entry"><dt>Schema Validation</dt><dd>Automated checking that configuration files follow the expected structure. Prevents malformed config from breaking the application — like spell-check but for data structure.</dd></div>
+      <div class="glossary-entry"><dt>Load Balancer</dt><dd>A traffic director that routes incoming requests to the correct client container based on who's making the request. Ensures each client reaches their own dedicated environment.</dd></div>
+      <div class="glossary-entry"><dt>Lambda</dt><dd>AWS Lambda — small, individual functions that run on-demand. The previous KKR architecture used many separate Lambda functions per client, creating duplication. Being replaced by containers.</dd></div>
+    </dl>
+  </div>
+</div>
+
+<script>
+function toggleGlossary() {
+  const content = document.getElementById('glossary-content');
+  const chevron = document.getElementById('glossary-chevron');
+  content.classList.toggle('open');
+  chevron.textContent = content.classList.contains('open') ? '▾' : '▸';
+}
+
+// ── STATE ──
+const state = {
+  activeTab: 'decisions',
+  selectedFolder: null,
+  expandedFolders: new Set(['intellilake', 'intellilake/apps', 'intellilake/contracts', 'intellilake/packages', 'intellilake/data', 'intellilake/infra', 'intellilake/docs']),
+  linearState: 'backlog',
+  tenant: 'millennium',
+  deployModel: 'saas',
+  cycleDay: 'monday',
+  activeTeam: null,
+};
+
+// ── MONOREPO DATA ──
+const treeData = {
+  id: 'intellilake', label: 'intellilake/', icon: '📦', depth: 0,
+  owner: null, team: null,
+  desc: 'Polyglot monorepo — TypeScript (Next.js) + Python (FastAPI). Turborepo orchestrates TS workspace; uv manages Python. Cross-language sharing via JSON contracts and OpenAPI specs, not runtime code.',
+  why: 'A monorepo ensures that a single Pull Request can change the API and the frontend that consumes it in one atomic commit. No cross-repo version coordination, no "which version of the API does this frontend expect?" questions. For a sub-10 person team, this eliminates an entire class of coordination problems.',
+  files: ['turbo.json', 'package.json', 'Justfile'],
+  interacts: [
+    { arrow: '→', target: 'apps/', note: 'Contains the two deployable services (web + api)' },
+    { arrow: '→', target: 'contracts/', note: 'Language-neutral JSON files both services consume' },
+    { arrow: '→', target: 'infra/', note: 'Wraps everything into containers and CI pipelines' },
+  ],
+  children: [
+    { id: 'intellilake/apps', label: 'apps/', icon: '🚀', depth: 1,
+      desc: 'Deployable services — each with its own language toolchain.',
+      why: 'Separating apps from shared code makes it clear what actually runs in production. Each app has its own dependency management and build process, but they deploy together from the same repo.',
+      interacts: [
+        { arrow: '←', target: 'contracts/', note: 'Both apps read tenant config JSON at startup' },
+        { arrow: '←', target: 'packages/', note: 'web/ imports from TS packages (api/ does NOT)' },
+        { arrow: '→', target: 'infra/docker/', note: 'Each app has its own Dockerfile' },
+      ],
+      children: [
+      { id: 'intellilake/apps/web', label: 'web/', icon: '🌐', depth: 2, owner: 'FE Lead', team: 'UI', badge: 'badge-fe',
+        desc: 'Next.js frontend (Turborepo managed). Serves the multi-tenant UI using ShadCN components rendered through a component registry. Consumes TS types from packages/ and JSON configs from contracts/.',
+        why: 'The frontend is what every client interacts with. Next.js gives us server-side rendering, file-based routing, and the React ecosystem. ShadCN provides a consistent component library so the team isn\'t building buttons and tables from scratch. The component registry pattern means tenant config controls which components appear — enabling multi-tenancy without separate codebases.',
+        files: ['pages/', 'components/', 'hooks/', 'styles/', 'next.config.js', 'package.json', 'turbo.json'],
+        interacts: [
+          { arrow: '→', target: 'apps/api/', note: 'All data flows through API calls — never directly to database' },
+          { arrow: '←', target: 'packages/ui-shared/', note: 'Imports shared React components and hooks' },
+          { arrow: '←', target: 'packages/ts-types/', note: 'Uses auto-generated types for API responses' },
+          { arrow: '←', target: 'contracts/tenant-configs/', note: 'Reads feature flags, branding, and page layout' },
+        ] },
+      { id: 'intellilake/apps/api', label: 'api/', icon: '⚡', depth: 2, owner: 'BE Lead', team: 'API', badge: 'badge-be',
+        desc: 'FastAPI backend (uv managed). Handles auth, business logic, Snowflake queries. Auto-generates OpenAPI spec consumed by the TS frontend for type generation. At container startup, merges repo JSON config with AWS Secrets Manager credentials.',
+        why: 'FastAPI was chosen because MLP already runs on it successfully — it\'s proven for this use case. It auto-generates an OpenAPI spec from Python type hints (Pydantic models), which means the API contract is always accurate and the frontend can auto-generate TypeScript types from it. uv manages Python dependencies with speed comparable to npm.',
+        files: ['routes/', 'services/', 'models/', 'config/', 'main.py', 'pyproject.toml', 'uv.lock'],
+        interacts: [
+          { arrow: '←', target: 'apps/web/', note: 'Receives API requests from frontend' },
+          { arrow: '←', target: 'contracts/tenant-configs/', note: 'Reads feature flags and non-secret config' },
+          { arrow: '←', target: 'AWS Secrets Manager', note: 'Fetches credentials at container startup (not in repo)' },
+          { arrow: '→', target: 'data/snowflake/', note: 'Queries Snowflake for client financial data' },
+          { arrow: '→', target: 'data/mongo/', note: 'Reads/writes cache to reduce Snowflake round-trips' },
+          { arrow: '→', target: 'packages/ts-types/', note: 'OpenAPI spec generated from Pydantic models → TS types' },
+        ] },
+    ]},
+    { id: 'intellilake/contracts', label: 'contracts/', icon: '📜', depth: 1, owner: 'Tech Lead', team: 'Platform', badge: 'badge-tech',
+      desc: 'Language-neutral shared contracts — the only folder truly consumed by both Python and TypeScript. JSON files that both apps read natively.',
+      why: 'TypeScript types can\'t be imported by Python, and Pydantic models can\'t be imported by TypeScript. But both languages read JSON natively. This folder is the bridge — it holds everything that needs to be shared across the language boundary. Keeping it separate from packages/ makes this boundary explicit.',
+      interacts: [
+        { arrow: '→', target: 'apps/web/', note: 'Frontend reads tenant config for feature flags and branding' },
+        { arrow: '→', target: 'apps/api/', note: 'Backend reads tenant config for data routing and behavior' },
+        { arrow: '←', target: 'infra/ci/', note: 'CI validates all configs against schemas on every PR' },
+      ],
+      children: [
+      { id: 'intellilake/contracts/tenant-configs', label: 'tenant-configs/', icon: '🏢', depth: 2, owner: 'Tech Lead', team: 'Platform', badge: 'badge-tech',
+        desc: 'Per-client JSON config files containing NON-SECRET config only: feature flags, branding, UI settings, auth provider choice. Credentials live in AWS Secrets Manager, not here.',
+        why: 'This is the core of multi-tenancy. Instead of maintaining separate code branches per client, all client differences live in configuration. A new client = a new JSON file. Feature flag changes go through PR review and are tested in staging before production. Only non-secret config lives here — credentials are in AWS Secrets Manager for financial compliance.',
+        files: ['millennium.json', 'kkr.json', 'config.example.json'],
+        interacts: [
+          { arrow: '→', target: 'apps/web/', note: 'Controls which components appear, branding, and enabled features' },
+          { arrow: '→', target: 'apps/api/', note: 'Controls API behavior, data routing, feature gating' },
+          { arrow: '←', target: 'contracts/schemas/', note: 'Validated against JSON Schema to prevent config errors' },
+        ] },
+      { id: 'intellilake/contracts/auth-configs', label: 'auth-configs/', icon: '🔐', depth: 2, owner: 'BE Lead + Tech Lead', team: 'API / Platform', badge: 'badge-cross',
+        desc: 'Auth provider settings as JSON. Maps providers (Cognito, Entra) to protocols (OIDC, SAML). Both apps read these to configure auth behavior per tenant.',
+        why: 'Different financial clients use different identity providers. Some use Microsoft Entra (SAML), others use AWS Cognito (OIDC). Instead of hardcoding auth behavior per client, provider settings are declared in JSON. The auth abstraction layer reads this to configure itself. Adding a new auth provider = adding a new config entry.',
+        files: ['providers.json', 'provider.example.json'],
+        interacts: [
+          { arrow: '→', target: 'apps/api/', note: 'API reads provider config to validate tokens correctly' },
+          { arrow: '→', target: 'apps/web/', note: 'Frontend reads provider config to show correct login flow' },
+        ] },
+      { id: 'intellilake/contracts/schemas', label: 'schemas/', icon: '📐', depth: 2, owner: 'Tech Lead', team: 'Platform', badge: 'badge-tech',
+        desc: 'JSON Schema definitions that validate contract files. CI runs validation on every PR to catch config drift before it reaches production.',
+        why: 'A malformed tenant config can break the entire application for a client. JSON Schema validation in CI catches structural errors before they merge — like type-checking but for configuration files. If someone adds a new field or typos a feature flag name, CI rejects the PR.',
+        files: ['tenant.schema.json'],
+        interacts: [
+          { arrow: '→', target: 'contracts/tenant-configs/', note: 'Validates all tenant config files on every PR' },
+          { arrow: '←', target: 'infra/ci/', note: 'CI pipeline runs schema validation as a required check' },
+        ] },
+    ]},
+    { id: 'intellilake/packages', label: 'packages/', icon: '📚', depth: 1,
+      desc: 'TypeScript-only shared packages (Turborepo workspace). Consumed by apps/web — NOT by the Python API.',
+      why: 'The frontend may grow into multiple entry points or micro-frontends over time. Shared packages prevent code duplication across the TS workspace. Critically, packages/ is TS-only — Python can\'t use it. The cross-language bridge is contracts/, not packages/.',
+      interacts: [
+        { arrow: '→', target: 'apps/web/', note: 'Frontend imports components and types from these packages' },
+        { arrow: '←', target: 'apps/api/', note: 'ts-types/ is generated FROM the API\'s OpenAPI spec' },
+      ],
+      children: [
+      { id: 'intellilake/packages/ui-shared', label: 'ui-shared/', icon: '🧩', depth: 2, owner: 'FE Lead', team: 'UI', badge: 'badge-fe',
+        desc: 'Shared React components, hooks, and utilities. The component registry lives here — the central catalog that maps component names to ShadCN-based implementations.',
+        why: 'The component registry is the architectural foundation for the A → B → C frontend progression. In Phase A, it maps names like "DataGrid" to real ShadCN components. In Phase B, it will accept richer schema-driven props. Having it as a shared package means it\'s reusable if the frontend ever splits into multiple apps.',
+        files: ['components/', 'hooks/', 'utils/', 'index.ts', 'package.json'],
+        interacts: [
+          { arrow: '→', target: 'apps/web/', note: 'Web app imports all shared components from here' },
+        ] },
+      { id: 'intellilake/packages/ts-types', label: 'ts-types/', icon: '🔗', depth: 2, owner: 'Tech Lead', team: 'Platform (auto-generated)', badge: 'badge-tech',
+        desc: 'Auto-generated TypeScript types from FastAPI\'s OpenAPI spec. Single source of truth: Python Pydantic models → OpenAPI → TS types. Run "just generate-types" to regenerate.',
+        why: 'This solves the polyglot type-sharing problem. Instead of manually keeping TypeScript interfaces in sync with Python Pydantic models (which will drift), types are auto-generated from the API\'s OpenAPI spec. The Python code is the source of truth. If the API changes, the frontend gets updated types automatically.',
+        files: ['api.generated.ts', 'package.json'],
+        interacts: [
+          { arrow: '→', target: 'apps/web/', note: 'Frontend uses these types for all API response handling' },
+          { arrow: '←', target: 'apps/api/', note: 'Generated from FastAPI\'s auto-produced OpenAPI spec' },
+        ] },
+    ]},
+    { id: 'intellilake/data', label: 'data/', icon: '🗄️', depth: 1,
+      desc: 'Database schemas, migrations, and query definitions.',
+      why: 'Keeping database definitions in the monorepo means they\'re versioned alongside the code that uses them. A migration that changes a Snowflake table can be in the same PR as the API code that adapts to it. No "which schema version does this API version expect?" confusion.',
+      interacts: [
+        { arrow: '→', target: 'apps/api/', note: 'API queries against the schemas defined here' },
+        { arrow: '←', target: 'infra/ci/', note: 'CI can run migration checks and schema validation' },
+      ],
+      children: [
+      { id: 'intellilake/data/snowflake', label: 'snowflake/', icon: '❄️', depth: 2, owner: 'Data Lead', team: 'Data Engineering', badge: 'badge-data',
+        desc: 'Snowflake schemas, migrations, and warehouse queries. Primary data store with separate accounts per tenant for complete financial data isolation.',
+        why: 'Snowflake is the primary data store for all client financial data. Each client gets a separate Snowflake account — this is the data isolation boundary for financial compliance. Schema definitions live here so migrations are tracked and reviewable. The API layer reads from Snowflake; the frontend never touches it directly.',
+        files: ['schemas/', 'migrations/', 'queries/', 'warehouse/'],
+        interacts: [
+          { arrow: '→', target: 'apps/api/', note: 'API executes queries against Snowflake via tenant-scoped credentials' },
+          { arrow: '←', target: 'AWS Secrets Manager', note: 'Connection credentials fetched at container startup' },
+        ] },
+      { id: 'intellilake/data/mongo', label: 'mongo/', icon: '🍃', depth: 2, owner: 'Data Lead', team: 'Data Engineering', badge: 'badge-data',
+        desc: 'MongoDB/DocumentDB cache layer definitions. Schemas, indexes, and TTL configurations for the caching tier.',
+        why: 'Snowflake queries can be slow for repeated requests. The Mongo/DocumentDB layer caches results so the same query doesn\'t hit Snowflake every time. MLP uses AWS DocumentDB; other clients use MongoDB. Both use the same PyMongo driver — only the connection string differs (stored in AWS Secrets Manager).',
+        files: ['schemas/', 'indexes/', 'ttl-configs/', 'seed/'],
+        interacts: [
+          { arrow: '→', target: 'apps/api/', note: 'API checks cache before querying Snowflake (cache hit = fast response)' },
+          { arrow: '←', target: 'data/snowflake/', note: 'Cache miss triggers Snowflake query; result stored in cache' },
+        ] },
+    ]},
+    { id: 'intellilake/infra', label: 'infra/', icon: '🏗️', depth: 1, owner: 'Tech Lead', team: 'Platform', badge: 'badge-tech',
+      desc: 'Infrastructure, CI/CD pipelines, and deployment configurations.',
+      why: 'Infrastructure as code means environments are reproducible and auditable. No manual server setup. The container-per-client model requires consistent Docker builds, and CI needs to test against ALL tenant configs (not just one) before code reaches production.',
+      interacts: [
+        { arrow: '←', target: 'apps/', note: 'Builds containers from app code' },
+        { arrow: '←', target: 'contracts/', note: 'CI validates all tenant configs against schemas' },
+        { arrow: '→', target: 'AWS', note: 'Deploys containers, manages infrastructure' },
+      ],
+      children: [
+      { id: 'intellilake/infra/docker', label: 'docker/', icon: '🐳', depth: 2, owner: 'Tech Lead', team: 'Platform', badge: 'badge-tech',
+        desc: 'Dockerfiles and compose configurations. One image per service (web, api), deployed as container-per-client.',
+        why: 'The container-per-client model means each client gets their own running container from the same Docker image. Docker ensures the image is identical everywhere — what works in staging works in production. docker-compose enables local development with both services running together.',
+        files: ['Dockerfile.web', 'Dockerfile.api', 'docker-compose.yml', 'docker-compose.dev.yml'],
+        interacts: [
+          { arrow: '←', target: 'apps/web/', note: 'Dockerfile.web builds the Next.js container image' },
+          { arrow: '←', target: 'apps/api/', note: 'Dockerfile.api builds the FastAPI container image' },
+          { arrow: '→', target: 'infra/ci/', note: 'CI builds images and pushes to container registry' },
+        ] },
+      { id: 'intellilake/infra/ci', label: 'ci/', icon: '🔄', depth: 2, owner: 'Tech Lead', team: 'Platform', badge: 'badge-tech',
+        desc: 'GitHub Actions CI/CD pipelines. Turborepo handles TS builds; uv handles Python. CI validates tenant configs against JSON Schema and runs tests for both languages against all tenant configs.',
+        why: 'Every PR must pass CI before merging to staging. CI runs tests for both languages, validates every tenant config, and builds both container images. The "test all tenants" step is critical — a change for one client must not break another. This is the safety net that makes single-codebase multi-tenancy work.',
+        files: ['build.yml', 'deploy-saas.yml', 'publish-release.yml', 'test-all-tenants.yml'],
+        interacts: [
+          { arrow: '←', target: 'contracts/schemas/', note: 'Runs JSON Schema validation on every tenant config' },
+          { arrow: '←', target: 'apps/', note: 'Runs test suites for both web and api' },
+          { arrow: '→', target: 'infra/docker/', note: 'Triggers container builds on merge to staging/main' },
+        ] },
+      { id: 'intellilake/infra/terraform', label: 'terraform/', icon: '🌍', depth: 2, owner: 'Tech Lead', team: 'Platform', badge: 'badge-tech',
+        desc: 'Infrastructure as code. AWS-first, designed for future multi-cloud expansion (Azure).',
+        why: 'Terraform defines the AWS infrastructure (load balancers, container hosting, IAM roles, networking) as code. This makes the infrastructure reproducible, auditable, and version-controlled. When a new client needs their own container + IAM role + secret, Terraform provisions it consistently.',
+        files: ['main.tf', 'variables.tf', 'modules/', 'environments/'],
+        interacts: [
+          { arrow: '→', target: 'AWS', note: 'Provisions load balancers, container hosting, IAM roles, secrets' },
+          { arrow: '←', target: 'contracts/tenant-configs/', note: 'New tenant config may trigger new Terraform resources' },
+        ] },
+    ]},
+    { id: 'intellilake/docs', label: 'docs/', icon: '📝', depth: 1,
+      desc: 'All documentation — architecture decisions, runbooks, and user-facing docs.',
+      why: 'Documentation lives next to the code it describes so it stays current. Engineers update docs in the same PR as code changes. Three categories serve three audiences: ADRs for future engineers asking "why?", runbooks for operators, and user docs for clients.',
+      interacts: [
+        { arrow: '←', target: 'apps/', note: 'Feature PRs include doc updates in the same commit' },
+        { arrow: '→', target: 'apps/web/', note: 'User docs ship inside the web container' },
+      ],
+      children: [
+      { id: 'intellilake/docs/decisions', label: 'decisions/', icon: '📋', depth: 2, owner: 'Tech Lead', team: 'Platform', badge: 'badge-tech',
+        desc: 'Architecture Decision Records (ADRs). Numbered and immutable — once written, they document the "why" permanently.',
+        why: 'Every major technical decision gets documented with the context, options considered, and rationale. When a new engineer joins and asks "why container-per-client instead of shared instance?", the ADR answers it. Immutable means you never edit old ADRs — you write a new one that supersedes it.',
+        files: ['001-monorepo.md', '002-git-workflow.md', '003-linear-setup.md', '004-multi-tenancy.md', '005-polyglot-toolchain.md', '006-config-split.md', '007-container-per-client.md', '008-frontend-progression.md'] },
+      { id: 'intellilake/docs/runbooks', label: 'runbooks/', icon: '📖', depth: 2, owner: 'Tech Lead', team: 'Platform', badge: 'badge-tech',
+        desc: 'Operational how-to guides. Living documents updated as processes evolve.',
+        why: 'Runbooks are step-by-step procedures for operations that happen repeatedly: onboarding a new tenant, promoting staging to production, handling a hotfix. Unlike ADRs (immutable), runbooks are updated whenever the process changes.',
+        files: ['new-tenant-standup.md', 'release-process.md', 'hotfix-process.md'] },
+      { id: 'intellilake/docs/user', label: 'user/', icon: '👤', depth: 2, owner: 'FE Lead', team: 'UI', badge: 'badge-fe',
+        desc: 'User-facing MDX docs rendered in-app at /app/docs/[slug]. Tenant-aware via TenantFeature components. Ships with container for version matching.',
+        why: 'Docs render inside the application behind auth. The TenantFeature component conditionally shows/hides sections based on the client\'s feature flags — KKR sees docs for features they have, not features only Millennium has. Docs ship inside the Docker container so dedicated-instance clients see docs matching their container version.',
+        files: ['getting-started.mdx', 'authentication.mdx', 'features/', 'changelog.mdx'],
+        interacts: [
+          { arrow: '←', target: 'contracts/tenant-configs/', note: 'TenantFeature checks feature flags to show/hide doc sections' },
+          { arrow: '→', target: 'apps/web/', note: 'MDX files rendered at /app/docs/[slug] inside Next.js' },
+        ] },
+    ]},
+    { id: 'intellilake/.github', label: '.github/', icon: '⚙️', depth: 1,
+      desc: 'GitHub repository configuration.',
+      why: 'CODEOWNERS ensures the right people review changes in their area — a frontend change gets reviewed by the FE lead, not the data engineer. The PR template enforces consistency: every PR must state its tenant impact.',
+      children: [
+      { id: 'intellilake/.github/CODEOWNERS', label: 'CODEOWNERS', icon: '📄', depth: 2, owner: 'Tech Lead', team: 'Platform', badge: 'badge-tech',
+        desc: 'Auto-assigns PR reviewers by folder path. Ensures the right leads review changes in their areas.',
+        why: 'Maps folder paths to team leads. A change in /apps/api/ auto-requests review from the BE Lead. A change in /contracts/ auto-requests the Tech Lead. This prevents knowledge silos and ensures domain experts approve changes in their area.',
+        isFile: true },
+      { id: 'intellilake/.github/pr-template', label: 'pull_request_template.md', icon: '📄', depth: 2,
+        desc: 'PR template with Linear issue link, change description, testing done, tenant impact, and docs updated checkbox.',
+        why: 'Forces every PR to answer: What changed? How was it tested? Which tenants are affected? Are docs updated? The "tenant impact" field is critical — it makes developers think about multi-tenancy on every change.',
+        isFile: true },
+    ]},
+  ]
+};
+
+// ── LINEAR STATE DATA ──
+const stateDetails = {
+  backlog: { title: 'Backlog', desc: 'Unscheduled work. May or may not happen. Issues live here until pulled into a cycle by the tech lead on Monday AM.' },
+  todo: { title: 'Todo', desc: 'Committed for this cycle. Assigned to someone. This is the dev\'s queue — pick from here when starting work.' },
+  progress: { title: 'In Progress', desc: 'Actively being worked on. Dev creates a branch from staging and begins implementation. Should not stay here longer than 3 days.' },
+  review: { title: 'In Review', desc: 'PR is open. Automated by GitHub integration — when a PR is opened with the branch name, Linear moves the issue here automatically.' },
+  done: { title: 'Done', desc: 'PR merged to staging. Automated by GitHub integration. Code is validated in the integration environment.' },
+};
+
+// ── TENANT CONFIG DATA ──
+const tenantConfigs = {
+  millennium: {
+    name: 'Millennium (MLP)',
+    json: {
+      tenant_id: 'millennium',
+      display_name: 'Millennium Partners',
+      auth: { provider: 'entra', protocol: 'saml', sso_enabled: true },
+      branding: { logo: '/assets/millennium-logo.svg', primary_color: '#1a365d', theme: 'dark' },
+      features: { bulk_export: true, advanced_grid: true, custom_reports: true, ai_insights: false },
+      data: { snowflake_account: 'mlp-prod-001', cache_ttl_minutes: 15 },
+    },
+    secrets: {
+      snowflake_password: '••••••••••••',
+      snowflake_user: 'svc_mlp_api',
+      snowflake_warehouse: 'MLP_WH',
+      snowflake_database: 'MLP_PROD',
+      cache_connection_string: 'mongodb://docdb-mlp-prod.cluster-xxxxx.us-east-1.docdb.amazonaws.com:27017',
+      auth_client_secret: '••••••••••••',
+    }
+  },
+  kkr: {
+    name: 'KKR',
+    json: {
+      tenant_id: 'kkr',
+      display_name: 'KKR & Co',
+      auth: { provider: 'cognito', protocol: 'oidc', sso_enabled: true },
+      branding: { logo: '/assets/kkr-logo.svg', primary_color: '#0f4c81', theme: 'light' },
+      features: { bulk_export: true, advanced_grid: false, custom_reports: true, ai_insights: true },
+      data: { snowflake_account: 'kkr-prod-001', cache_ttl_minutes: 30 },
+    },
+    secrets: {
+      snowflake_password: '••••••••••••',
+      snowflake_user: 'svc_kkr_api',
+      snowflake_warehouse: 'KKR_WH',
+      snowflake_database: 'KKR_PROD',
+      cache_connection_string: 'mongodb+srv://kkr-cluster.xxxxx.mongodb.net/kkr_cache',
+      auth_client_secret: '••••••••••••',
+      cognito_user_pool_id: 'us-east-1_xxxxxxxx',
+    }
+  },
+  future: {
+    name: 'Future Client',
+    json: {
+      tenant_id: 'client-c',
+      display_name: 'Acme Capital',
+      auth: { provider: 'cognito', protocol: 'oidc', sso_enabled: false },
+      branding: { logo: '/assets/acme-logo.svg', primary_color: '#6366f1', theme: 'dark' },
+      features: { bulk_export: false, advanced_grid: false, custom_reports: false, ai_insights: false },
+      data: { snowflake_account: 'acme-prod-001', cache_ttl_minutes: 60 },
+    },
+    secrets: {
+      snowflake_password: '••••••••••••',
+      snowflake_user: 'svc_acme_api',
+      snowflake_warehouse: 'ACME_WH',
+      snowflake_database: 'ACME_PROD',
+      cache_connection_string: 'mongodb+srv://acme-cluster.xxxxx.mongodb.net/acme_cache',
+      auth_client_secret: '••••••••••••',
+    }
+  }
+};
+
+const deployDetails = {
+  saas: {
+    title: 'Multi-tenant SaaS (Container-per-client)',
+    points: [
+      ['Model', 'Container-per-client — same Docker image, per-client IAM role + secrets'],
+      ['Infra managed by', 'Intellilake'],
+      ['Config sources', 'Repo JSON (feature flags, branding) + AWS Secrets Manager (credentials)'],
+      ['Versioning', 'Always latest — auto-deployed from staging → main'],
+      ['Data isolation', 'Each container scoped to its own Snowflake account + cache via IAM'],
+      ['New client', 'New JSON config + new AWS Secret + spin up container'],
+    ]
+  },
+  dedicated: {
+    title: 'Dedicated Instance',
+    points: [
+      ['Model', 'Client runs their own container(s) on their own infrastructure'],
+      ['Infra managed by', 'Client (their own AWS/Azure account)'],
+      ['Config sources', 'JSON config shipped in image + client manages their own AWS Secrets'],
+      ['Versioning', 'Semantic versioned container images (v2.1.0, v2.2.0)'],
+      ['Data isolation', 'Full physical isolation — client owns all infrastructure'],
+      ['Upgrade path', 'Client chooses when to pull new container version'],
+    ]
+  }
+};
+
+// ── CYCLE DATA ──
+const days = [
+  { key: 'monday', name: 'Mon', event: 'Sprint Planning', eventColor: 'var(--accent)',
+    detail: '<h4>Monday AM — Sprint Planning</h4>Tech lead reviews Backlog, pulls issues into Todo, assigns to leads. Target: 15 minutes. Each lead confirms capacity and flags risks. All issues must have a team, type label, and scope estimate before entering Todo.' },
+  { key: 'tuesday', name: 'Tue', event: null,
+    detail: '<h4>Tuesday — Execution</h4>Devs pick Todo issues, move to In Progress, create branches from staging. Focus on implementation. Branch naming: <code>feat/TEAM-N-description</code>.' },
+  { key: 'wednesday', name: 'Wed', event: 'Mid-cycle Check', eventColor: 'var(--amber)',
+    detail: '<h4>Wednesday — Mid-cycle Check</h4>Quick async review. Flag blocked or stale items (In Progress with no update). Tech lead checks the "Stale Issues" saved view. Unblock or reassign as needed.' },
+  { key: 'thursday', name: 'Thu', event: null,
+    detail: '<h4>Thursday — Execution + PR</h4>Continue implementation. Open PRs for completed work. Rebase from staging before opening PR. CODEOWNER reviews begin.' },
+  { key: 'friday', name: 'Fri', event: 'Cycle Closes', eventColor: 'var(--green)',
+    detail: '<h4>Friday — Cycle Closes</h4>Unfinished work either rolls to next cycle (once only) or returns to Backlog. Tech lead evaluates staging for promotion to main. If all CI passes and no blocked issues, promote.' },
+];
+
+const teams = [
+  { key: 'UI', name: 'UI', scope: 'Next.js frontend, components, UX', color: 'var(--blue)', bg: 'var(--blue-dim)' },
+  { key: 'API', name: 'API', scope: 'FastAPI, auth integration, business logic', color: 'var(--green)', bg: 'var(--green-dim)' },
+  { key: 'DE', name: 'Data Engineering', scope: 'Snowflake, Mongo, pipelines', color: 'var(--amber)', bg: 'var(--amber-dim)' },
+  { key: 'DS', name: 'Data Science', scope: 'ML, analytics, data requirements', color: 'var(--pink)', bg: 'rgba(236,72,153,0.2)' },
+  { key: 'PLT', name: 'Platform', scope: 'CI/CD, environments, infra, cross-cutting config', color: 'var(--purple)', bg: 'var(--purple-dim)' },
+];
+
+const labelGroups = [
+  { name: 'Type', class: 'label-type', labels: ['feature', 'bug', 'chore', 'spike'] },
+  { name: 'Domain', class: 'label-domain', labels: ['auth', 'snowflake', 'mongo', 'nextjs', 'fastapi', 'infra', 'tenant-config'] },
+  { name: 'Status', class: 'label-status', labels: ['blocked', 'needs-design', 'needs-info'] },
+  { name: 'Scope', class: 'label-scope', labels: ['small (<½ day)', 'medium (1–2d)', 'large (3–5d)'] },
+];
+
+// ── RENDER FUNCTIONS ──
+
+function renderTree() {
+  const container = document.getElementById('tree');
+  container.innerHTML = '';
+
+  function renderNode(node, indent) {
+    const div = document.createElement('div');
+    div.className = 'tree-node' + (state.selectedFolder === node.id ? ' selected' : '');
+    div.onclick = (e) => {
+      e.stopPropagation();
+      if (node.children) {
+        if (state.expandedFolders.has(node.id)) state.expandedFolders.delete(node.id);
+        else state.expandedFolders.add(node.id);
+      }
+      state.selectedFolder = node.id;
+      renderTree();
+      renderDetail(node);
+      updatePrompt();
+    };
+
+    let html = '';
+    for (let i = 0; i < indent; i++) html += '<span class="tree-indent"></span>';
+
+    if (node.children) {
+      const expanded = state.expandedFolders.has(node.id);
+      html += `<span class="tree-icon">${expanded ? '▾' : '▸'}</span>`;
+    } else {
+      html += `<span class="tree-icon">${node.isFile ? '─' : '─'}</span>`;
+    }
+
+    html += `<span class="tree-label">${node.label}</span>`;
+    if (node.badge && node.owner) {
+      html += `<span class="tree-badge ${node.badge}">${node.owner}</span>`;
+    }
+    div.innerHTML = html;
+    container.appendChild(div);
+
+    if (node.children && state.expandedFolders.has(node.id)) {
+      node.children.forEach(child => renderNode(child, indent + 1));
+    }
+  }
+
+  renderNode(treeData, 0);
+}
+
+function renderDetail(node) {
+  document.getElementById('detail-name').textContent = node.label;
+  document.getElementById('detail-path').textContent = node.id.replace('intellilake', '') || '/';
+  document.getElementById('detail-desc').textContent = node.desc || '';
+
+  let meta = '';
+  if (node.owner) meta += `<div class="detail-row"><span class="label">Owner</span><span class="value">${node.owner}</span></div>`;
+  if (node.team) meta += `<div class="detail-row"><span class="label">Team</span><span class="value">${node.team}</span></div>`;
+  if (node.children) meta += `<div class="detail-row"><span class="label">Contents</span><span class="value">${node.children.length} items</span></div>`;
+
+  if (node.why) {
+    meta += `<div class="detail-why"><div class="detail-why-label">Why this exists</div>${node.why}</div>`;
+  }
+
+  if (node.interacts && node.interacts.length) {
+    meta += '<div class="detail-interacts"><div class="detail-interacts-label">Interactions</div>';
+    node.interacts.forEach(i => {
+      meta += `<div class="interact-item"><span class="interact-arrow">${i.arrow}</span><span><span class="interact-target">${i.target}</span> — ${i.note}</span></div>`;
+    });
+    meta += '</div>';
+  }
+
+  if (node.files) {
+    meta += '<div class="detail-files" style="margin-top:12px"><div style="font-family:-apple-system,system-ui,sans-serif;font-weight:600;color:var(--text-muted);font-size:11px;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px">Key Files</div>';
+    node.files.forEach(f => { meta += `<div style="color:var(--text-dim)">${f}</div>`; });
+    meta += '</div>';
+  }
+  document.getElementById('detail-meta').innerHTML = meta;
+}
+
+function selectState(s) {
+  state.linearState = s;
+  document.querySelectorAll('.linear-state').forEach(el => el.classList.remove('active-state'));
+  document.querySelector(`[data-state="${s}"]`).classList.add('active-state');
+  const d = stateDetails[s];
+  document.getElementById('state-detail').innerHTML = `<strong>${d.title}</strong> — ${d.desc}`;
+  updatePrompt();
+}
+
+function renderDevWorkflow() {
+  const steps = [
+    { num: '1', text: 'Pick Todo issue', color: 'var(--accent)' },
+    { num: '2', text: 'Move to In Progress', color: 'var(--amber)' },
+    { num: '3', text: 'Branch from staging', color: 'var(--purple)' },
+    { num: '4', text: 'Do the work', color: 'var(--text-dim)' },
+    { num: '5', text: 'Rebase from staging', color: 'var(--blue)' },
+    { num: '6', text: 'Open PR → In Review', color: 'var(--blue)' },
+    { num: '7', text: 'CODEOWNER approves', color: 'var(--cyan)' },
+    { num: '8', text: 'Merge → Done', color: 'var(--green)' },
+  ];
+  const container = document.getElementById('dev-workflow');
+  container.innerHTML = steps.map((s, i) =>
+    `<div style="display:flex;align-items:center;gap:6px;padding:8px 12px;background:var(--surface2);border-radius:8px;font-size:11px">` +
+    `<span style="color:${s.color};font-weight:700;font-family:monospace">${s.num}</span>` +
+    `<span style="color:var(--text-dim)">${s.text}</span>` +
+    `</div>` +
+    (i < steps.length - 1 ? '<span style="color:var(--text-muted);font-size:14px">→</span>' : '')
+  ).join('');
+}
+
+function selectTenant(t) {
+  state.tenant = t;
+  document.querySelectorAll('.tenant-btn').forEach(el => el.classList.remove('active'));
+  document.querySelector(`[data-tenant="${t}"]`).classList.add('active');
+  renderTenantJson();
+  renderArchDiagram();
+  updatePrompt();
+}
+
+function highlightJson(obj, indent) {
+  let lines = [];
+  const pad = '  '.repeat(indent);
+  const entries = Object.entries(obj);
+  entries.forEach(([key, val], i) => {
+    const comma = i < entries.length - 1 ? ',' : '';
+    if (typeof val === 'object' && !Array.isArray(val)) {
+      lines.push(`${pad}<span class="json-key">"${key}"</span>: {`);
+      lines.push(highlightJson(val, indent + 1));
+      lines.push(`${pad}}${comma}`);
+    } else if (typeof val === 'string') {
+      const cls = val.includes('••••') ? 'json-comment' : 'json-string';
+      lines.push(`${pad}<span class="json-key">"${key}"</span>: <span class="${cls}">"${val}"</span>${comma}`);
+    } else if (typeof val === 'boolean') {
+      lines.push(`${pad}<span class="json-key">"${key}"</span>: <span class="json-bool">${val}</span>${comma}`);
+    } else {
+      lines.push(`${pad}<span class="json-key">"${key}"</span>: <span class="json-bool">${val}</span>${comma}`);
+    }
+  });
+  return lines.join('\n');
+}
+
+function renderTenantJson() {
+  const t = tenantConfigs[state.tenant];
+
+  // Repo JSON
+  document.getElementById('tenant-json').innerHTML =
+    '<span class="json-comment">// contracts/tenant-configs/' + t.json.tenant_id + '.json</span>\n' +
+    '<span class="json-comment">// Committed to repo. Changed via PR. CI validates against schema.</span>\n{\n' +
+    highlightJson(t.json, 1) + '\n}';
+
+  // AWS Secrets
+  document.getElementById('secrets-json').innerHTML =
+    '<span class="json-comment">// AWS Secrets Manager: intellilake/' + t.json.tenant_id + '/prod</span>\n' +
+    '<span class="json-comment">// Never in source control. Fetched at container startup via IAM role.</span>\n{\n' +
+    highlightJson(t.secrets, 1) + '\n}';
+
+  // Config workflow
+  renderConfigWorkflow();
+}
+
+function renderConfigWorkflow() {
+  const t = tenantConfigs[state.tenant];
+  const steps = [
+    { num: '1', label: 'Dev edits JSON on feature branch', color: 'var(--purple)',
+      detail: `Developer opens <code style="color:var(--green)">contracts/tenant-configs/${t.json.tenant_id}.json</code> and changes a feature flag, adds a nav item, or updates branding. This file is in the monorepo — editable on any feature branch like regular code.` },
+    { num: '2', label: 'Dev tests locally with change', color: 'var(--blue)',
+      detail: 'Dev runs <code>just dev</code>. docker-compose starts both services. The app reads the modified JSON from disk and merges it with dev AWS Secrets Manager credentials. Dev sees the config change immediately with hot reload.' },
+    { num: '3', label: 'PR opened → CI validates', color: 'var(--amber)',
+      detail: 'Dev opens PR to staging. CI runs JSON Schema validation against <code>contracts/schemas/tenant.schema.json</code> — catches structural errors (missing fields, wrong types). Tests run against ALL tenant configs to verify the change doesn\'t break other clients.' },
+    { num: '4', label: 'CODEOWNER reviews config change', color: 'var(--cyan)',
+      detail: 'CODEOWNERS maps <code>/contracts/</code> to the Tech Lead. The config change gets reviewed before merge — someone verifies the feature flag makes sense, the branding is correct, or the new nav item is appropriate for this client.' },
+    { num: '5', label: 'Merge to staging → auto-deploy', color: 'var(--blue)',
+      detail: 'PR merges to staging. New container image builds with the updated JSON baked in. Staging ECS Fargate pulls the new image. The staging container reads the updated repo JSON + staging AWS Secrets Manager → config change is live in staging for validation.' },
+    { num: '6', label: 'Promote to production', color: 'var(--green)',
+      detail: 'Tech lead promotes staging → main. Production containers restart with the new image. Each container re-reads repo JSON (now with the change) and fetches production secrets from AWS Secrets Manager. Config change is live for the client.' },
+  ];
+
+  document.getElementById('config-workflow').innerHTML =
+    '<div style="font-size:11px;color:var(--text-muted);margin-bottom:12px">Example: adding a feature flag for ' + t.name + '</div>' +
+    steps.map((s, i) =>
+      `<div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:10px">` +
+      `<div style="width:24px;height:24px;border-radius:50%;background:var(--surface2);border:2px solid ${s.color};color:${s.color};font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px">${s.num}</div>` +
+      `<div style="flex:1">` +
+      `<div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:3px">${s.label}</div>` +
+      `<div style="font-size:11px;color:var(--text-dim);line-height:1.6">${s.detail}</div>` +
+      `</div></div>`
+    ).join('') +
+    '<div style="margin-top:14px;padding:10px 12px;background:var(--surface2);border-radius:8px;border-left:3px solid var(--amber);font-size:11px;color:var(--text-dim);line-height:1.6">' +
+    '<strong style="color:var(--amber)">Secrets changes follow a different path:</strong> If a Snowflake password rotates or a new client needs credentials, the Tech Lead updates AWS Secrets Manager directly (via console or CLI). No PR, no code change, no redeploy. The container fetches secrets at each startup — next restart picks up the new values. CloudTrail provides the audit trail.' +
+    '</div>';
+}
+
+function selectDeploy(m) {
+  state.deployModel = m;
+  document.querySelectorAll('.deploy-btn').forEach(el => el.classList.remove('active'));
+  document.querySelector(`[data-model="${m}"]`).classList.add('active');
+  renderDeployDetail();
+  renderArchDiagram();
+  updatePrompt();
+}
+
+function renderDeployDetail() {
+  const d = deployDetails[state.deployModel];
+  document.getElementById('deploy-detail').innerHTML =
+    d.points.map(([k, v]) => `<div style="margin-bottom:4px"><strong>${k}:</strong> ${v}</div>`).join('');
+}
+
+function renderArchDiagram() {
+  const config = tenantConfigs[state.tenant].json;
+  const isSaas = state.deployModel === 'saas';
+  const container = document.getElementById('arch-diagram');
+
+  const layers = [
+    { label: `Auth: ${config.auth.provider.toUpperCase()} (${config.auth.protocol.toUpperCase()})`, border: 'var(--accent)', bg: 'rgba(99,102,241,0.08)' },
+    { label: 'Load Balancer → routes by client ID', border: 'var(--text-muted)', bg: 'rgba(139,143,163,0.06)' },
+    { label: 'Per-Client Container (same Docker image)', border: 'var(--purple)', bg: 'rgba(168,85,247,0.08)' },
+    { label: 'Config merge: repo JSON + AWS Secrets Manager', border: 'var(--amber)', bg: 'rgba(245,158,11,0.08)' },
+    { label: 'UI (Next.js + ShadCN) — Component Registry', border: 'var(--blue)', bg: 'rgba(59,130,246,0.08)' },
+    { label: 'API (FastAPI) — OpenAPI spec → TS types', border: 'var(--green)', bg: 'rgba(34,197,94,0.08)' },
+    { label: `Cache: Mongo/DocDB (TTL: ${config.data.cache_ttl_minutes}min)`, border: 'var(--amber)', bg: 'rgba(245,158,11,0.06)' },
+    { label: `Snowflake: ${config.data.snowflake_account}`, border: 'var(--cyan)', bg: 'rgba(6,182,212,0.08)' },
+  ];
+
+  container.innerHTML = layers.map((l, i) =>
+    `<div class="arch-layer" style="border-color:${l.border};background:${l.bg};color:${l.border};font-size:11px">${l.label}</div>` +
+    (i < layers.length - 1 ? '<div class="arch-arrow-down">↓</div>' : '')
+  ).join('') +
+  `<div style="margin-top:12px;font-size:11px;color:var(--text-muted);text-align:center">` +
+  (isSaas ? 'Container-per-client — Intellilake manages infra, IAM scopes each container to its own secrets' : 'Dedicated infrastructure — client manages their own stack and secrets') +
+  `</div>`;
+}
+
+function renderCycle() {
+  const track = document.getElementById('week-track');
+  track.innerHTML = days.map(d => {
+    let cls = 'day-block';
+    if (d.key === state.cycleDay) cls += ' active-day';
+    if (d.event) cls += ' event-day';
+    let html = `<div class="${cls}" onclick="selectDay('${d.key}')">`;
+    html += `<div class="day-name">${d.name}</div>`;
+    if (d.event) {
+      html += `<div class="day-event" style="background:${d.eventColor}22;color:${d.eventColor}">${d.event}</div>`;
+    } else {
+      html += '<div class="day-label">Execution</div>';
+    }
+    html += '</div>';
+    return html;
+  }).join('');
+
+  const day = days.find(d => d.key === state.cycleDay);
+  document.getElementById('cycle-detail').innerHTML = day.detail;
+}
+
+function selectDay(d) {
+  state.cycleDay = d;
+  renderCycle();
+  updatePrompt();
+}
+
+function renderTeams() {
+  const container = document.getElementById('teams-grid');
+  container.innerHTML = teams.map(t =>
+    `<div class="team-row${state.activeTeam === t.key ? ' active-team' : ''}" onclick="selectTeam('${t.key}')">` +
+    `<span class="team-key" style="background:${t.bg};color:${t.color}">${t.key}</span>` +
+    `<span class="team-name">${t.name}</span>` +
+    `<span class="team-scope">${t.scope}</span>` +
+    `</div>`
+  ).join('');
+}
+
+function selectTeam(t) {
+  state.activeTeam = state.activeTeam === t ? null : t;
+  renderTeams();
+  updatePrompt();
+}
+
+function renderLabels() {
+  const container = document.getElementById('labels-showcase');
+  container.innerHTML = labelGroups.map(g =>
+    `<div class="labels-group">` +
+    `<div class="labels-group-name">${g.name}</div>` +
+    `<div class="labels-list">${g.labels.map(l => `<span class="label-chip ${g.class}">${l}</span>`).join('')}</div>` +
+    `</div>`
+  ).join('');
+}
+
+// ── ENVIRONMENTS & PIPELINE DATA ──
+
+const environments = {
+  local: {
+    title: 'Local Development',
+    pipelineTitle: 'Developer Workflow',
+    diagram: [
+      { icon: '💻', name: 'Your Machine', desc: 'git clone the monorepo. Run <code>just install</code> to set up both TS (pnpm) and Python (uv) dependencies.' },
+      { arrow: true },
+      { icon: '🐳', name: 'docker-compose', desc: 'Runs both <code>apps/web</code> (Next.js on :3000) and <code>apps/api</code> (FastAPI on :8000) locally with hot reload.' },
+      { arrow: true },
+      { icon: '🔐', name: 'Dev AWS Account', desc: 'Shared dev AWS account with its own Secrets Manager. Devs assume a dev IAM role to fetch test credentials. Same pattern as production — no mock layer.' },
+      { arrow: true },
+      { icon: '📜', name: 'Repo JSON Configs', desc: 'Tenant configs read directly from <code>contracts/tenant-configs/</code>. Switch clients by changing an env var.' },
+      { arrow: true },
+      { icon: '❄️', name: 'Dev Snowflake', desc: 'Dev Snowflake account with test data. Credentials from dev AWS Secrets Manager. Same connection pattern as production.' },
+    ],
+    stages: [
+      { name: 'Install', tool: 'just install', detail: '<h4>just install</h4>Runs <code>pnpm install</code> for the TS workspace (apps/web + packages/*) and <code>uv sync</code> for the Python app (apps/api). One command, both languages.' },
+      { name: 'Dev Server', tool: 'just dev', detail: '<h4>just dev</h4>Starts <code>docker-compose up</code> which runs both Next.js (port 3000) and FastAPI (port 8000) with hot reload. Changes to code are reflected immediately without rebuilding containers.' },
+      { name: 'Generate Types', tool: 'just generate-types', detail: '<h4>just generate-types</h4>Starts the FastAPI server temporarily, fetches its <code>/openapi.json</code>, and generates TypeScript types into <code>packages/ts-types/api.generated.ts</code>. Run after changing any Pydantic models in the API.' },
+      { name: 'Test', tool: 'just test', detail: '<h4>just test</h4>Runs both test suites: <code>pnpm test</code> (Vitest/Jest for web) and <code>uv run pytest</code> (pytest for API). Tests run against the dev tenant config.' },
+      { name: 'Lint', tool: 'just lint', detail: '<h4>just lint</h4>Runs <code>eslint + prettier</code> for TypeScript and <code>ruff</code> for Python. Catches formatting and code quality issues before you open a PR.' },
+    ]
+  },
+  ci: {
+    title: 'CI Pipeline (GitHub Actions)',
+    pipelineTitle: 'Stages — runs on every PR to staging',
+    diagram: [
+      { icon: '🔀', name: 'PR Opened', desc: 'Developer opens PR from feature branch to staging. Linear auto-moves issue to In Review. CODEOWNERS auto-assigns reviewers.' },
+      { arrow: true },
+      { icon: '🤖', name: 'GitHub Actions', desc: 'CI triggers automatically. Runs in isolated runner with both Node.js and Python available.' },
+      { arrow: true },
+      { icon: '✅', name: 'All Checks Pass', desc: 'Every stage must pass. Failure blocks merge. PR cannot land on staging with broken tests or invalid configs.' },
+      { arrow: true },
+      { icon: '🔀', name: 'Merge to Staging', desc: 'CODEOWNER approves + CI passes → merge to staging. Linear auto-moves issue to Done.' },
+    ],
+    stages: [
+      { name: 'Lint', tool: 'ESLint + Ruff', detail: '<h4>Lint (parallel)</h4>Runs <code>eslint + prettier</code> on all TS files and <code>ruff</code> on all Python files. Fast — catches formatting issues in seconds. Runs in parallel for both languages.' },
+      { name: 'Test (TS)', tool: 'Turborepo', detail: '<h4>Test TypeScript</h4>Turborepo runs <code>pnpm test</code> across apps/web and all packages. Turborepo caches results — unchanged packages skip testing. Only affected code is re-tested.' },
+      { name: 'Test (Python)', tool: 'uv + pytest', detail: '<h4>Test Python</h4><code>uv run pytest</code> runs the full API test suite. Tests run against <strong>every tenant config</strong> in contracts/tenant-configs/ — a change for Millennium must not break KKR.' },
+      { name: 'Validate Configs', tool: 'JSON Schema', detail: '<h4>Validate Tenant Configs</h4>Every JSON file in contracts/ is validated against the schema in contracts/schemas/. Catches malformed configs, missing fields, and type errors before they reach staging. This is the safety net for multi-tenancy.' },
+      { name: 'Build Images', tool: 'Docker', detail: '<h4>Build Container Images</h4>Builds <code>Dockerfile.web</code> and <code>Dockerfile.api</code>. Images are tagged with the commit SHA. On merge to staging, images are pushed to ECR (AWS container registry).' },
+      { name: 'Generate Types', tool: 'OpenAPI', detail: '<h4>Verify Types in Sync</h4>Regenerates TS types from the API\'s OpenAPI spec and checks for differences. If <code>api.generated.ts</code> is stale, CI fails — forces devs to keep types current.' },
+    ]
+  },
+  staging: {
+    title: 'Staging Environment',
+    pipelineTitle: 'Deploy to Staging — auto on merge',
+    diagram: [
+      { icon: '🔀', name: 'Merge to Staging', desc: 'Feature branch merges to staging branch. Triggers the staging deploy pipeline automatically.' },
+      { arrow: true },
+      { icon: '📦', name: 'ECR (Container Registry)', desc: 'CI pushes container images tagged with commit SHA to AWS ECR. Both web and api images stored here.' },
+      { arrow: true },
+      { icon: '⚖️', name: 'Load Balancer', desc: 'Routes traffic to staging containers. Same topology as production but with staging tenant configs and staging Snowflake data.' },
+      { arrow: true },
+      { icon: '🐳', name: 'ECS Fargate (Staging)', desc: 'Container-per-client — same as production. Each client has a staging container with staging secrets. Tests run here before production promotion.' },
+      { arrow: true },
+      { icon: '🔐', name: 'Staging Secrets Manager', desc: 'Separate AWS Secrets Manager from production. Staging credentials point to staging Snowflake accounts and staging cache databases.' },
+      { arrow: true },
+      { icon: '❄️', name: 'Staging Snowflake', desc: 'Staging Snowflake accounts with test data mirroring production structure. Safe to test against without affecting real client data.' },
+    ],
+    stages: [
+      { name: 'Auto-Deploy', tool: 'GitHub Actions', detail: '<h4>Automatic Deployment</h4>When code merges to staging branch, CI automatically deploys the new images to the staging ECS Fargate cluster. Zero manual steps — merge triggers deploy.' },
+      { name: 'Pull Images', tool: 'ECR → ECS', detail: '<h4>Image Pull</h4>ECS Fargate pulls the latest images (tagged with staging commit SHA) from ECR. Each staging client container gets the new image.' },
+      { name: 'Config Merge', tool: 'Startup', detail: '<h4>Container Startup</h4>Each container starts and merges config from two sources: repo JSON (baked into the image) and staging AWS Secrets Manager (fetched at startup via IAM role). Merged into single runtime config object.' },
+      { name: 'Smoke Tests', tool: 'Automated', detail: '<h4>Post-Deploy Smoke Tests</h4>Automated health checks verify each tenant container is running. Basic API endpoint tests confirm data flows correctly for each client. Failures alert the tech lead.' },
+      { name: 'Validate', tool: 'Manual + Auto', detail: '<h4>Staging Validation</h4>Tech lead and relevant devs verify the changes in staging. For UI changes, check each affected tenant. For API changes, verify responses match expectations. Staging is the last gate before production.' },
+    ]
+  },
+  production: {
+    title: 'Production Environment',
+    pipelineTitle: 'Promote to Production — tech lead controlled',
+    diagram: [
+      { icon: '🛡️', name: 'Tech Lead Promotes', desc: 'Tech lead merges staging → main on a controlled cadence (end of cycle or per-release). Requires: all CI passes, test suite passes all tenants, no blocked issues.' },
+      { arrow: true },
+      { icon: '📦', name: 'ECR (Production Tags)', desc: 'Images re-tagged from staging SHA to production release. For dedicated instances, images also get semantic version tags (v2.1.0).' },
+      { arrow: true },
+      { icon: '⚖️', name: 'Production Load Balancer', desc: 'Routes each client\'s traffic to their dedicated container. Client identification via subdomain or path — Platform team decides routing strategy.' },
+      { arrow: true },
+      { icon: '🐳', name: 'ECS Fargate (Production)', desc: 'Container-per-client with dedicated IAM role per container. Each container can ONLY access its own client\'s secrets. This is the data isolation boundary for financial compliance.' },
+      { arrow: true },
+      { icon: '🔐', name: 'Production Secrets Manager', desc: 'Real client credentials. Each container\'s IAM role scopes access to exactly one secret. Rotation and audit trail enabled. No human reads these in normal operation.' },
+      { arrow: true },
+      { icon: '❄️', name: 'Production Snowflake', desc: 'Real client financial data. Separate Snowflake accounts per client — complete data isolation. One client\'s queries never touch another client\'s data.' },
+      { arrow: true },
+      { icon: '🍃', name: 'Cache (DocDB/Mongo)', desc: 'DocumentDB for MLP, MongoDB for others. Same PyMongo driver, different connection strings from Secrets Manager. Caches Snowflake results to reduce query cost and latency.' },
+    ],
+    stages: [
+      { name: 'Pre-flight', tool: 'Checklist', detail: '<h4>Pre-flight Checklist</h4>Tech lead verifies before promoting staging → main:<br>• All CI checks pass on staging<br>• Test suite passes against ALL tenant configs<br>• No <code>blocked</code> issues in current cycle tied to staging code<br>• Staging validation complete for all affected tenants' },
+      { name: 'Promote', tool: 'git merge', detail: '<h4>Staging → Main</h4>Tech lead merges staging to main. This is the production deployment trigger. GitHub Actions CI runs one final time on main to confirm everything passes.' },
+      { name: 'Deploy SaaS', tool: 'ECS Update', detail: '<h4>Deploy to SaaS Clients</h4>ECS Fargate services update to the new image. Rolling deployment — one container at a time to avoid downtime. Each container restarts, fetches fresh secrets, merges config, and begins serving traffic.' },
+      { name: 'Publish Release', tool: 'Semver tag', detail: '<h4>Publish for Dedicated Instances</h4>Docker images tagged with semantic version (v2.1.0) and pushed to ECR. Dedicated-instance clients pull the new version when they choose to upgrade. Release notes generated from Linear cycle.' },
+      { name: 'Monitor', tool: 'CloudWatch', detail: '<h4>Post-Deploy Monitoring</h4>Watch error rates, response times, and container health per client. If anomalies detected, rollback to previous image tag. Centralized logging across all client containers.' },
+    ]
+  },
+};
+
+let currentEnv = 'local';
+let currentStage = 0;
+
+function selectEnv(env) {
+  currentEnv = env;
+  currentStage = 0;
+  document.querySelectorAll('.env-btn').forEach(el => el.classList.remove('active'));
+  document.querySelector(`[data-env="${env}"]`).classList.add('active');
+  renderEnv();
+  updatePrompt();
+}
+
+function selectStage(idx) {
+  currentStage = idx;
+  const e = environments[currentEnv];
+  document.querySelectorAll('.pipeline-stage').forEach((el, i) => {
+    el.classList.toggle('active-stage', i === idx);
+  });
+  document.getElementById('pipeline-detail').innerHTML = e.stages[idx].detail;
+  updatePrompt();
+}
+
+function renderEnv() {
+  const e = environments[currentEnv];
+  document.getElementById('env-title').textContent = e.title;
+  document.getElementById('pipeline-title').textContent = e.pipelineTitle;
+
+  // Diagram
+  const diagramEl = document.getElementById('env-diagram');
+  diagramEl.innerHTML = '<div class="env-diagram">' + e.diagram.map(layer => {
+    if (layer.arrow) return '<div class="env-layer-arrow">↓</div>';
+    return `<div class="env-layer"><span class="env-layer-icon">${layer.icon}</span><span class="env-layer-name">${layer.name}</span><span class="env-layer-desc">${layer.desc}</span></div>`;
+  }).join('') + '</div>';
+
+  // Pipeline stages
+  const stagesEl = document.getElementById('pipeline-stages');
+  stagesEl.innerHTML = '<div class="pipeline-stages">' + e.stages.map((s, i) =>
+    `<div class="pipeline-stage${i === currentStage ? ' active-stage' : ''}" onclick="selectStage(${i})"><div class="pipeline-stage-name">${s.name}</div><div class="pipeline-stage-tool">${s.tool}</div></div>`
+  ).join('') + '</div>';
+
+  document.getElementById('pipeline-detail').innerHTML = e.stages[currentStage].detail;
+}
+
+// ── DECISIONS DATA ──
+
+const decisions = [
+  {
+    id: 'container-per-client',
+    status: 'confirmed',
+    title: 'Container-per-client deployment',
+    subtitle: 'Each client gets a dedicated container from the same Docker image',
+    rationale: 'Financial clients require infrastructure-level data isolation. Each container runs with its own IAM role that can only access that specific client\'s secrets and data. This gives auditors a clear isolation boundary: Container (millennium) → IAM Role (millennium-api) → Secret (millennium-secrets). No container can access another client\'s credentials.',
+    chosen: { label: 'Container-per-client', desc: 'Same Docker image, per-client container with dedicated IAM role. Load balancer routes by client ID.' },
+    alternatives: [
+      { label: 'Single shared instance', desc: 'One running instance serves all tenants, resolving tenant at request time. Simpler infra, but weaker isolation story for compliance.' },
+      { label: 'Hybrid (SaaS shared + Dedicated)', desc: 'SaaS clients share an instance, enterprise clients get dedicated. Adds architectural complexity for a small team.' },
+    ],
+    adr: '007-container-per-client.md',
+  },
+  {
+    id: 'config-split',
+    status: 'confirmed',
+    title: 'Config split: Secrets Manager + repo JSON',
+    subtitle: 'Credentials in AWS, feature flags in version-controlled JSON',
+    rationale: 'Financial clients require that credentials never appear in source control — this is a compliance requirement, not a preference. But feature flags and branding don\'t need that security boundary. Putting them behind AWS console access slows the team for no security benefit.\n\nThe split gives us: PR-reviewable feature flag changes (tested in staging before production), plus IAM-scoped credential access with rotation and audit trails. Two sources, each appropriate for its content type.',
+    chosen: { label: 'Split by concern', desc: 'Secrets (credentials, keys) in AWS Secrets Manager. Non-secret config (feature flags, branding, UI) in repo JSON files with PR review.' },
+    alternatives: [
+      { label: 'Everything in repo JSON', desc: 'Simple, one source. But credentials in source control = compliance audit failure for financial clients. Every dev sees every client\'s passwords.' },
+      { label: 'Everything in Secrets Manager', desc: 'Maximum security. But feature flag changes require AWS console access instead of a PR. No git history for config changes. Local dev requires AWS credentials.' },
+    ],
+    adr: '006-config-split.md',
+  },
+  {
+    id: 'frontend-progression',
+    status: 'confirmed',
+    title: 'Frontend: A → B → C progression',
+    subtitle: 'Config-driven composition first, schema-driven later, full engine deferred',
+    rationale: 'The team needs to ship Millennium and KKR on a short timeline. A full JSON UI engine (Phase C) would take 8-12+ weeks just for the rendering framework. Config-driven composition (Phase A) gets multi-tenant pages working in 1-2 weeks using standard React and ShadCN components.\n\nThe key architectural decision is the component registry — every component renders through it from day one. This means Phase B (schema-driven pages with richer props) is additive, not a rewrite. Phase C is deferred because building a custom UI framework is a massive investment for a sub-10 person team and should only happen if tenant count and customization demands justify it.',
+    chosen: { label: 'A → B progression', desc: 'Phase A (config-driven) ships fast. Component registry bridges to Phase B (schema-driven). Phase C (full engine) only if proven necessary.' },
+    alternatives: [
+      { label: 'Start at Phase B directly', desc: 'Skip config-driven, build schema renderer from day one. Closer to end-state sooner but 3-5 weeks to first delivery. Higher risk if schemas aren\'t well-defined.' },
+      { label: 'Full Phase C from day one', desc: 'James\'s full vision — every element JSON-driven. 8-12+ weeks, effectively building a custom framework. Loses ShadCN benefits, TypeScript safety, and standard debugging.' },
+    ],
+    adr: '008-frontend-progression.md',
+  },
+  {
+    id: 'lambda-migration',
+    status: 'confirmed',
+    title: 'KKR Lambda → containerized FastAPI',
+    subtitle: 'MLP\'s FastAPI/Docker model is proven and becomes the template',
+    rationale: 'KKR currently uses per-client Lambda functions (API Gateway + N Lambdas per endpoint). This creates code duplication, scattered global variables, and bug fixes that must be applied to every Lambda copy manually. MLP already runs as FastAPI on Docker/EC2 — a centralized codebase with config injection at runtime.\n\nThe MLP model is proven to work. Rather than maintaining two fundamentally different backend architectures, all clients migrate to the container model. This eliminates Lambda sprawl and aligns with the container-per-client deployment decision.',
+    chosen: { label: 'Migrate to containerized FastAPI', desc: 'All clients use the MLP model: single FastAPI codebase, Docker containers, config injection at runtime.' },
+    alternatives: [
+      { label: 'Keep Lambda for KKR', desc: 'Avoid migration risk. But maintains two architectures indefinitely — doubles maintenance burden and prevents code sharing between clients.' },
+      { label: 'Rebuild both on a new framework', desc: 'Start fresh with neither Lambda nor current FastAPI. Maximum flexibility but maximum risk and timeline for a team under delivery pressure.' },
+    ],
+    adr: null,
+  },
+  {
+    id: 'polyglot-toolchain',
+    status: 'confirmed',
+    title: 'Turborepo + uv polyglot monorepo',
+    subtitle: 'TypeScript and Python managed by their native tools, tied together by Justfile',
+    rationale: 'A monorepo with both TypeScript and Python can\'t share runtime code across languages. The contracts/ folder contains language-neutral JSON files consumed by both. The packages/ folder is TypeScript-only (Turborepo workspace). FastAPI auto-generates an OpenAPI spec, and the frontend generates TypeScript types from it — one source of truth, two languages.\n\nTurborepo handles TS builds with caching. uv manages Python fast. A Justfile ties both together with polyglot targets (install, dev, test, generate-types).',
+    chosen: { label: 'Turborepo + uv + Justfile', desc: 'Each language uses its best-in-class tool. JSON contracts bridge them. OpenAPI is the API contract.' },
+    alternatives: [
+      { label: 'Nx (supports polyglot)', desc: 'Nx has Python plugins. More setup but gives dependency graph across languages. Adds complexity the team may not need yet.' },
+      { label: 'Separate repos', desc: 'Each language in its own repo. Simpler per-repo, but loses atomic commits (one PR changing both API and frontend) and unified CI.' },
+    ],
+    adr: '005-polyglot-toolchain.md',
+  },
+  {
+    id: 'vault-docs-strategic',
+    status: 'confirmed',
+    title: 'Vault docs stay strategic; implementation details in repo ADRs',
+    subtitle: 'Architecture doc covers what and why, not how',
+    rationale: 'The vault architecture document is for stakeholders and high-level decision-making. Implementation details (code layering patterns, cache hit/miss flows, DocumentDB vs MongoDB specifics) belong in the monorepo\'s /docs/decisions/ ADRs where they live next to the code they describe and are maintained by the engineers who implement them.',
+    chosen: { label: 'Strategic vault + detailed ADRs', desc: 'Vault doc covers decisions and rationale. Monorepo ADRs cover implementation specifics.' },
+    alternatives: [
+      { label: 'Everything in vault', desc: 'One place for all docs. But implementation details go stale fast when separated from the code. Engineers won\'t maintain vault docs.' },
+      { label: 'Everything in repo', desc: 'All docs next to code. But stakeholders don\'t browse GitHub repos for architectural context.' },
+    ],
+    adr: null,
+  },
+  {
+    id: 'api-gateway',
+    status: 'proposed',
+    title: 'API Gateway vs ALB + WAF — pending team decision',
+    subtitle: 'How to secure FastAPI containers at the infrastructure level',
+    rationale: 'The current KKR architecture uses AWS API Gateway in front of Lambdas. The key question is whether this should carry forward to the containerized FastAPI model.\n\nThe critical factor is the 10MB payload size limit on API Gateway. The team previously hit this limit, which forced a workaround where the frontend reads directly from Mongo (bypassing the API layer).\n\nNew context from 02-26 standup: MLP\'s removal of API Gateway was a misconfiguration (deployed as public instead of private within VPN), not an architectural rejection. After removing it, CORS and security updates had to be applied to each FastAPI individually — creating the "N APIs × M security changes" problem James described. Sualeh supports it for middleware/CORS/XSS protection. Abbad has working Terraform ready.\n\nRevised analysis: With 1 FastAPI server, the centralization value is limited. But if the API surface grows to 2-3 services per client, centralizing CORS, auth, and rate limiting in one place becomes significantly more valuable. Compromise: start with ALB + WAF, add API Gateway (private, within VPN) when the API surface expands.',
+    chosen: { label: 'ALB + WAF now, API Gateway later', desc: 'Start with WAF at LB for MLP + KKR delivery. Add API Gateway (deployed privately within VPN) when API surface expands beyond a single FastAPI. Avoids 10MB limit and complexity for now while keeping the path open.' },
+    alternatives: [
+      { label: 'API Gateway (REST API)', desc: 'Full-featured gateway with WAF, throttling, API keys, and caching. But: 10MB payload limit (known blocker), $3.50/million requests, 10-30ms added latency, complex routing for container-per-client.' },
+      { label: 'API Gateway (HTTP API)', desc: 'Lighter gateway with JWT validation and basic throttling. Cheaper ($1/million). But: no WAF integration, still has payload considerations, adds a hop for minimal value if auth is in FastAPI.' },
+      { label: 'ALB only (no WAF)', desc: 'Simplest possible. But no infrastructure-level security — all protection must be in application code. Harder to justify to financial client security audits.' },
+    ],
+    adr: '009-api-security-layer.md (pending)',
+  },
+];
+
+function renderDecisions() {
+  const container = document.getElementById('decisions-list');
+  container.innerHTML = decisions.map(d => {
+    const statusClass = d.status === 'confirmed' ? 'status-confirmed' : d.status === 'proposed' ? 'status-proposed' : 'status-deferred';
+    const statusLabel = d.status.charAt(0).toUpperCase() + d.status.slice(1);
+    return `<div class="decision-card" id="dec-${d.id}" onclick="toggleDecision('${d.id}')">
+      <div class="decision-header">
+        <div class="decision-status ${statusClass}" title="${statusLabel}"></div>
+        <div style="flex:1">
+          <div class="decision-title">${d.title}</div>
+          <div class="decision-subtitle">${d.subtitle}</div>
+        </div>
+        <div class="decision-chevron">▸</div>
+      </div>
+      <div class="decision-body">
+        <h4>Rationale</h4>
+        <div>${d.rationale.replace(/\n\n/g, '<br><br>')}</div>
+        <h4>Options Evaluated</h4>
+        <div class="alt-grid">
+          <div class="alt-option chosen">
+            <div class="alt-option-title">✓ ${d.chosen.label}</div>
+            <div class="alt-option-desc">${d.chosen.desc}</div>
+          </div>
+          ${d.alternatives.map(a => `<div class="alt-option rejected">
+            <div class="alt-option-title">${a.label}</div>
+            <div class="alt-option-desc">${a.desc}</div>
+          </div>`).join('')}
+        </div>
+        ${d.adr ? `<div class="decision-adr">ADR: /docs/decisions/${d.adr}</div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleDecision(id) {
+  const card = document.getElementById('dec-' + id);
+  card.classList.toggle('expanded');
+}
+
+// ── PROMPT OUTPUT ──
+
+function updatePrompt() {
+  const parts = [];
+
+  parts.push('Intellilake development environment overview:');
+  parts.push('');
+
+  if (state.activeTab === 'decisions') {
+    parts.push('Confirmed architecture decisions:');
+    decisions.forEach(d => {
+      parts.push(`• ${d.title} [${d.status}] — ${d.subtitle}`);
+    });
+  }
+
+  if (state.activeTab === 'monorepo' && state.selectedFolder) {
+    const node = findNode(treeData, state.selectedFolder);
+    if (node) {
+      parts.push(`Currently viewing: ${node.id}`);
+      if (node.owner) parts.push(`Owner: ${node.owner} (${node.team} team)`);
+      if (node.desc) parts.push(`Purpose: ${node.desc}`);
+      if (node.files) parts.push(`Key files: ${node.files.join(', ')}`);
+    }
+  }
+
+  if (state.activeTab === 'workflow') {
+    const s = stateDetails[state.linearState];
+    parts.push(`Workflow state: ${s.title} — ${s.desc}`);
+    parts.push('');
+    parts.push('Branch strategy: main ← staging ← feature branches');
+    parts.push('Branch naming: feat/TEAM-N-description, fix/TEAM-N-description, chore/TEAM-N-description');
+  }
+
+  if (state.activeTab === 'tenant') {
+    const t = tenantConfigs[state.tenant];
+    parts.push(`Tenant: ${t.name}`);
+    parts.push(`Auth: ${t.json.auth.provider} via ${t.json.auth.protocol}`);
+    parts.push(`Deployment: ${state.deployModel === 'saas' ? 'Multi-tenant SaaS (Intellilake-managed)' : 'Dedicated Instance (client-managed)'}`);
+    parts.push(`Snowflake account: ${t.json.data.snowflake_account}`);
+    const enabledFeatures = Object.entries(t.json.features).filter(([,v]) => v).map(([k]) => k.replace(/_/g, ' '));
+    const disabledFeatures = Object.entries(t.json.features).filter(([,v]) => !v).map(([k]) => k.replace(/_/g, ' '));
+    if (enabledFeatures.length) parts.push(`Enabled features: ${enabledFeatures.join(', ')}`);
+    if (disabledFeatures.length) parts.push(`Disabled features: ${disabledFeatures.join(', ')}`);
+  }
+
+  if (state.activeTab === 'pipeline') {
+    const e = environments[currentEnv];
+    parts.push(`Environment: ${e.title}`);
+    parts.push(`Stage: ${e.stages[currentStage].name} (${e.stages[currentStage].tool})`);
+    parts.push('');
+    parts.push('Environments: Local Dev (docker-compose + dev AWS account) → CI (GitHub Actions) → Staging (ECS Fargate, auto-deploy on merge) → Production (ECS Fargate, tech lead promotes)');
+  }
+
+  if (state.activeTab === 'cycle') {
+    const day = days.find(d => d.key === state.cycleDay);
+    parts.push(`Cycle day: ${day.name}${day.event ? ` — ${day.event}` : ' — Execution day'}`);
+    if (state.activeTeam) {
+      const team = teams.find(t => t.key === state.activeTeam);
+      parts.push(`Selected team: ${team.name} (${team.key}) — ${team.scope}`);
+    }
+  }
+
+  document.getElementById('prompt-output').textContent = parts.join('\n');
+}
+
+function findNode(node, id) {
+  if (node.id === id) return node;
+  if (node.children) {
+    for (const child of node.children) {
+      const found = findNode(child, id);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+function copyPrompt() {
+  const text = document.getElementById('prompt-output').textContent;
+  navigator.clipboard.writeText(text);
+  const btn = document.getElementById('copy-btn');
+  btn.textContent = 'Copied!';
+  btn.classList.add('copied');
+  setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1500);
+}
+
+// ── TAB SWITCHING ──
+
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    const panelId = 'panel-' + tab.dataset.tab;
+    document.getElementById(panelId).classList.add('active');
+    state.activeTab = tab.dataset.tab;
+    updatePrompt();
+  });
+});
+
+// ── INIT ──
+
+renderDecisions();
+renderEnv();
+renderTree();
+renderDetail(treeData);
+renderDevWorkflow();
+renderTenantJson();
+renderDeployDetail();
+renderArchDiagram();
+renderCycle();
+renderTeams();
+renderLabels();
+updatePrompt();
+</script>
+</body>
+</html>

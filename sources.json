@@ -2,7 +2,7 @@
   "sources": [
     {
       "repo": "Intellilake-Platform/platform",
-      "branch": "main",
+      "branches": ["main", "staging"],
       "files": [
         {
           "src": "docs/intellilake-platform-overview.html",
@@ -23,7 +23,7 @@
     },
     {
       "repo": "Intellilake-Platform/scratch",
-      "branch": "main",
+      "branches": ["main"],
       "files": [
         {
           "src": "py/docs/playground_hierarchy_parser.html",
