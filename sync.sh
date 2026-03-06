@@ -267,13 +267,14 @@ CARD_CLOSE
 done
 
 # --- Footer ----------------------------------------------------------------
-cat >> "$INDEX" << 'HTML_FOOT'
+SYNC_DATE=$(date -u '+%Y-%m-%d %H:%M UTC')
+cat >> "$INDEX" <<HTML_FOOT
 
   </div>
 </div>
 
 <div class="footer">
-  Intellilake &mdash; <a href="https://github.com/IL-SCoussens/playgrounds">Source on GitHub</a>
+  Intellilake &mdash; <a href="https://github.com/IL-SCoussens/playgrounds">Source on GitHub</a> &mdash; Last synced $SYNC_DATE
 </div>
 
 </body>
