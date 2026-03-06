@@ -71,15 +71,14 @@ for (( i=0; i<num_sources; i++ )); do
         echo "    $dest — up to date"
         unchanged_count=$((unchanged_count + 1))
       else
-        cp "$src_path" "$dest_path"
         echo "    $dest — updated"
         updated_count=$((updated_count + 1))
       fi
     else
-      cp "$src_path" "$dest_path"
       echo "    $dest — added (new)"
       new_count=$((new_count + 1))
     fi
+    cp "$src_path" "$dest_path"
   done
 done
 
