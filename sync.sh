@@ -439,3 +439,18 @@ echo '</html>' >> "$INDEX"
 echo ""
 echo "Done. new=$new_count updated=$updated_count unchanged=$unchanged_count"
 echo "Index written to docs/index.html"
+
+# ---------------------------------------------------------------------------
+# 4. Commit and push if there are changes
+# ---------------------------------------------------------------------------
+cd "$SCRIPT_DIR"
+if git diff --quiet && git diff --cached --quiet && [ -z "$(git ls-files --others --exclude-standard docs/)" ]; then
+  echo "No changes to commit."
+else
+  echo ""
+  echo "==> Committing and pushing..."
+  git add docs/ sources.json
+  git commit -m "Sync playgrounds: $(date -u '+%Y-%m-%d %H:%M UTC')"
+  git push
+  echo "Pushed to remote."
+fi

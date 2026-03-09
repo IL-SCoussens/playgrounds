@@ -18,6 +18,20 @@
             { "label": "CI/CD", "color": "blue" },
             { "label": "ADRs", "color": "purple" }
           ]
+        },
+        {
+          "src": "docs/clients/infra-explorer.html",
+          "dest": "infra-explorer.html",
+          "title": "Infrastructure Explorer",
+          "description": "Interactive Terraform architecture map: explore all 8 IaC modules (networking, EC2, DocumentDB, ALB/NLB, ECR, Secrets, Airflow ECS), environment compositions (shared, staging, production, client), the 5-phase installer flow, and client packaging/delivery process.",
+          "icon": "☁️",
+          "icon_color": "blue",
+          "tags": [
+            { "label": "Terraform", "color": "blue" },
+            { "label": "AWS", "color": "amber" },
+            { "label": "Deployment", "color": "green" },
+            { "label": "Installer", "color": "purple" }
+          ]
         }
       ]
     },

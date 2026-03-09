@@ -1,0 +1,1428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IntelliLake Infrastructure Explorer</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface2: #1c2128;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-dim: #8b949e;
+    --accent: #58a6ff;
+    --accent2: #3fb950;
+    --accent3: #d2a8ff;
+    --accent4: #f0883e;
+    --accent5: #ff7b72;
+    --accent6: #79c0ff;
+    --accent7: #ffa657;
+    --node-bg: #21262d;
+    --node-hover: #292e36;
+    --radius: 8px;
+    --mono: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    overflow: hidden;
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    grid-template-rows: auto 1fr auto;
+  }
+
+  /* ── Tab bar ── */
+  .tab-bar {
+    grid-column: 1 / 3;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: stretch;
+    padding: 0 16px;
+    gap: 0;
+  }
+
+  .tab-btn {
+    padding: 10px 20px;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-dim);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: inherit;
+  }
+
+  .tab-btn:hover { color: var(--text); background: rgba(88,166,255,0.05); }
+  .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  .tab-title {
+    display: flex;
+    align-items: center;
+    padding: 10px 0;
+    margin-right: auto;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--accent);
+    letter-spacing: -0.3px;
+    padding-right: 24px;
+  }
+
+  .tab-title span {
+    color: var(--text-dim);
+    font-weight: 400;
+    font-size: 11px;
+    margin-left: 10px;
+  }
+
+  /* ── Tab content areas ── */
+  .tab-content { display: none; }
+  .tab-content.active { display: contents; }
+
+  /* ── Sidebar (Tab 1) ── */
+  .sidebar {
+    grid-row: 2 / 4;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .control-group {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  .control-group-header {
+    background: var(--surface2);
+    padding: 8px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-dim);
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .control-group-header::after { content: '\25BE'; font-size: 10px; }
+  .control-group.collapsed .control-group-body { display: none; }
+  .control-group.collapsed .control-group-header::after { content: '\25B8'; }
+
+  .control-group-body {
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .preset-btn {
+    display: block;
+    width: 100%;
+    padding: 8px 12px;
+    background: var(--node-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 13px;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.15s;
+  }
+
+  .preset-btn:hover { background: var(--node-hover); border-color: var(--accent); }
+  .preset-btn.active { border-color: var(--accent); background: rgba(88,166,255,0.1); }
+
+  .filter-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 6px 10px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    color: var(--text);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .filter-btn:hover { background: var(--node-bg); }
+  .filter-btn.active { background: rgba(88,166,255,0.08); }
+
+  .filter-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* ── Canvas (Tab 1) ── */
+  .canvas-area {
+    position: relative;
+    overflow: hidden;
+    background: var(--bg);
+    cursor: grab;
+  }
+
+  .canvas-area:active { cursor: grabbing; }
+
+  .canvas-inner {
+    position: absolute;
+    top: 0; left: 0;
+    transform-origin: 0 0;
+    will-change: transform;
+  }
+
+  svg.diagram { display: block; }
+
+  .node-group { cursor: pointer; }
+  .node-group:hover .node-rect { stroke: var(--accent); stroke-width: 2; }
+  .node-rect {
+    fill: var(--node-bg);
+    stroke: var(--border);
+    stroke-width: 1;
+    rx: 8; ry: 8;
+    transition: fill 0.15s, stroke 0.15s;
+  }
+
+  .node-group.selected .node-rect { stroke: var(--accent); stroke-width: 2; fill: rgba(88,166,255,0.08); }
+  .node-group.dimmed { opacity: 0.2; }
+  .node-group.dimmed .node-rect { stroke: var(--border); stroke-width: 1; }
+
+  .node-title { fill: var(--text); font-size: 13px; font-weight: 600; font-family: inherit; }
+  .node-subtitle { fill: var(--text-dim); font-size: 11px; font-family: var(--mono); }
+  .node-badge { font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; font-family: inherit; }
+  .node-badge-bg { rx: 4; ry: 4; opacity: 0.2; }
+
+  .connection { fill: none; stroke-width: 1.5; opacity: 0.5; transition: opacity 0.2s; }
+  .connection.dimmed { opacity: 0.06; }
+  .connection.highlighted { opacity: 0.9; stroke-width: 2; }
+  .connection-arrow { transition: opacity 0.2s; }
+  .connection-arrow.dimmed { opacity: 0.06; }
+  .connection-arrow.highlighted { opacity: 0.9; }
+
+  .layer-label { fill: var(--text-dim); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; opacity: 0.4; font-family: inherit; }
+  .layer-line { stroke: var(--border); stroke-width: 1; stroke-dasharray: 4 4; opacity: 0.3; }
+
+  .detail-panel {
+    position: absolute;
+    top: 16px; right: 16px;
+    width: 340px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    z-index: 10;
+    display: none;
+    max-height: calc(100% - 32px);
+    overflow-y: auto;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  }
+
+  .detail-panel.visible { display: block; }
+
+  .detail-close {
+    position: absolute; top: 8px; right: 8px;
+    width: 24px; height: 24px;
+    border: none; background: transparent;
+    color: var(--text-dim); font-size: 16px;
+    cursor: pointer; border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  .detail-close:hover { background: var(--node-bg); color: var(--text); }
+  .detail-title { font-size: 16px; font-weight: 600; margin-bottom: 4px; padding-right: 24px; }
+  .detail-path { font-size: 11px; font-family: var(--mono); color: var(--accent); margin-bottom: 12px; word-break: break-all; }
+  .detail-desc { font-size: 13px; line-height: 1.5; color: var(--text-dim); margin-bottom: 12px; }
+  .detail-section-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-dim); margin: 12px 0 6px; }
+  .detail-list { list-style: none; display: flex; flex-direction: column; gap: 3px; }
+  .detail-list li { font-size: 12px; color: var(--text); padding: 3px 0; }
+  .detail-tag { display: inline-block; padding: 2px 8px; background: rgba(88,166,255,0.1); border: 1px solid rgba(88,166,255,0.2); border-radius: 4px; font-size: 11px; color: var(--accent); margin: 2px 4px 2px 0; }
+
+  .zoom-controls { position: absolute; bottom: 16px; left: 16px; display: flex; gap: 4px; z-index: 5; }
+  .zoom-btn {
+    width: 32px; height: 32px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 6px; color: var(--text); font-size: 16px;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+  }
+
+  .zoom-btn:hover { background: var(--node-hover); border-color: var(--accent); }
+  .zoom-label { height: 32px; padding: 0 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; color: var(--text-dim); font-size: 11px; display: flex; align-items: center; font-family: var(--mono); }
+
+  .legend { position: absolute; bottom: 16px; right: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px; z-index: 5; display: flex; gap: 14px; font-size: 11px; color: var(--text-dim); flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-line { width: 20px; height: 2px; border-radius: 1px; }
+
+  /* ── Prompt bar ── */
+  .prompt-bar {
+    grid-column: 1 / 3;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    padding: 12px 16px;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    min-height: 60px;
+  }
+
+  .prompt-text {
+    flex: 1;
+    font-size: 13px; line-height: 1.5;
+    color: var(--text-dim);
+    font-family: var(--mono);
+    white-space: pre-wrap;
+    max-height: 80px;
+    overflow-y: auto;
+  }
+
+  .copy-btn {
+    padding: 6px 14px; background: var(--accent); color: #0d1117;
+    border: none; border-radius: 6px; font-size: 12px; font-weight: 600;
+    cursor: pointer; white-space: nowrap; flex-shrink: 0;
+    transition: background 0.15s;
+  }
+
+  .copy-btn:hover { background: #79c0ff; }
+  .copy-btn.copied { background: var(--accent2); }
+
+  /* ── Deployment Flow (Tab 2) ── */
+  .flow-container {
+    grid-column: 1 / 3;
+    grid-row: 2 / 3;
+    overflow-y: auto;
+    padding: 32px 48px 32px 48px;
+    background: var(--bg);
+  }
+
+  .flow-section {
+    margin-bottom: 40px;
+  }
+
+  .flow-section-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+
+  .flow-section-badge {
+    padding: 4px 12px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    flex-shrink: 0;
+  }
+
+  .flow-section-title {
+    font-size: 18px;
+    font-weight: 600;
+  }
+
+  .flow-section-subtitle {
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-left: auto;
+  }
+
+  /* Swimlane */
+  .swimlane {
+    position: relative;
+    display: flex;
+    gap: 0;
+    min-height: 160px;
+  }
+
+  .swimlane-label {
+    width: 120px;
+    flex-shrink: 0;
+    padding: 16px 12px 16px 0;
+    text-align: right;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-dim);
+    border-right: 2px solid var(--border);
+  }
+
+  .swimlane-content {
+    flex: 1;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 16px 0 16px 20px;
+    position: relative;
+    flex-wrap: wrap;
+  }
+
+  /* Flow step card */
+  .flow-card {
+    background: var(--node-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    min-width: 180px;
+    max-width: 240px;
+    transition: all 0.2s;
+    cursor: default;
+    position: relative;
+  }
+
+  .flow-card:hover { border-color: var(--accent); }
+  .flow-card.active-step { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+
+  .flow-card-num {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+  }
+
+  .flow-card-title {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  .flow-card-desc {
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text-dim);
+  }
+
+  .flow-card-cmd {
+    margin-top: 8px;
+    padding: 6px 10px;
+    background: rgba(0,0,0,0.3);
+    border-radius: 4px;
+    font-size: 11px;
+    font-family: var(--mono);
+    color: var(--accent6);
+    word-break: break-all;
+  }
+
+  .flow-card-files {
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .flow-card-file {
+    font-size: 11px;
+    font-family: var(--mono);
+    color: var(--text-dim);
+    padding: 1px 0;
+  }
+
+  /* Arrow between cards */
+  .flow-arrow {
+    display: flex;
+    align-items: center;
+    align-self: center;
+    color: var(--text-dim);
+    font-size: 18px;
+    flex-shrink: 0;
+    padding: 0 2px;
+  }
+
+  /* Handoff divider */
+  .handoff-divider {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin: 32px 0;
+    padding: 0 0 0 132px;
+  }
+
+  .handoff-line {
+    flex: 1;
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent4), var(--accent2));
+    border-radius: 1px;
+  }
+
+  .handoff-badge {
+    padding: 6px 16px;
+    background: var(--surface);
+    border: 1px solid var(--accent4);
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent4);
+    white-space: nowrap;
+  }
+
+  /* Delivery contents grid */
+  .delivery-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 12px;
+    padding: 0 0 0 140px;
+    margin-bottom: 8px;
+  }
+
+  .delivery-item {
+    background: var(--node-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+  }
+
+  .delivery-item-title {
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .delivery-item-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .delivery-item-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .delivery-item-list li {
+    font-size: 11px;
+    font-family: var(--mono);
+    color: var(--text-dim);
+    padding: 1px 0;
+  }
+
+  /* Post-install */
+  .post-install-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    padding: 0 0 0 140px;
+  }
+
+  .post-card {
+    background: var(--node-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+  }
+
+  .post-card-num {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    color: var(--accent2);
+    margin-bottom: 6px;
+  }
+
+  .post-card-title {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  .post-card-desc {
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text-dim);
+  }
+
+  /* Flow step tracker */
+  .flow-tracker {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    padding: 0 0 0 140px;
+    margin-bottom: 24px;
+  }
+
+  .flow-tracker-step {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px;
+    background: var(--node-bg);
+    border: 1px solid var(--border);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .flow-tracker-step:first-child { border-radius: 6px 0 0 6px; }
+  .flow-tracker-step:last-child { border-radius: 0 6px 6px 0; }
+  .flow-tracker-step:hover { background: var(--node-hover); color: var(--text); }
+  .flow-tracker-step.highlight { background: rgba(88,166,255,0.1); border-color: var(--accent); color: var(--accent); z-index: 1; }
+
+  .flow-tracker-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+</style>
+</head>
+<body>
+
+<!-- Tab bar -->
+<div class="tab-bar">
+  <div class="tab-title">IntelliLake Infra<span>Deployment Explorer</span></div>
+  <button class="tab-btn active" id="tab-arch-btn">Architecture</button>
+  <button class="tab-btn" id="tab-flow-btn">Deployment Flow</button>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- TAB 1: Architecture (existing)                                 -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div class="tab-content active" id="tab-arch">
+  <div class="sidebar" id="sidebar-arch">
+    <div class="control-group">
+      <div class="control-group-header" id="presets-header">Views</div>
+      <div class="control-group-body" id="presets"></div>
+    </div>
+    <div class="control-group">
+      <div class="control-group-header" id="layers-header">Layers</div>
+      <div class="control-group-body" id="layer-filters"></div>
+    </div>
+    <div class="control-group">
+      <div class="control-group-header" id="conns-header">Connections</div>
+      <div class="control-group-body" id="connection-filters"></div>
+    </div>
+    <div class="control-group">
+      <div class="control-group-header" id="tree-header">File Tree</div>
+      <div class="control-group-body" id="file-tree" style="font-size:11px; font-family:var(--mono); line-height:1.6; color:var(--text-dim);"></div>
+    </div>
+  </div>
+
+  <div class="canvas-area" id="canvas-area">
+    <div class="canvas-inner" id="canvas-inner">
+      <svg class="diagram" id="diagram"></svg>
+    </div>
+    <div class="detail-panel" id="detail-panel">
+      <button class="detail-close" id="detail-close-btn">&times;</button>
+      <div id="detail-content"></div>
+    </div>
+    <div class="zoom-controls">
+      <button class="zoom-btn" id="zoom-out">-</button>
+      <div class="zoom-label" id="zoom-label">100%</div>
+      <button class="zoom-btn" id="zoom-in">+</button>
+      <button class="zoom-btn" id="zoom-reset" title="Reset view">R</button>
+    </div>
+    <div class="legend" id="legend"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- TAB 2: Deployment Flow                                         -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div class="tab-content" id="tab-flow">
+  <div class="flow-container" id="flow-container"></div>
+</div>
+
+<!-- Prompt bar (shared) -->
+<div class="prompt-bar">
+  <div class="prompt-text" id="prompt-text">Click a node to explore the IntelliLake deployment architecture.</div>
+  <button class="copy-btn" id="copy-btn">Copy</button>
+</div>
+
+<script>
+// ================================================================
+// Shared helpers
+// ================================================================
+
+function clearChildren(el) {
+  while (el.firstChild) el.removeChild(el.firstChild);
+}
+
+function createEl(tag, attrs, text) {
+  var el = document.createElement(tag);
+  if (attrs) {
+    for (var k in attrs) {
+      if (k === 'className') el.className = attrs[k];
+      else if (k === 'style' && typeof attrs[k] === 'object') {
+        for (var s in attrs[k]) el.style[s] = attrs[k][s];
+      }
+      else el.setAttribute(k, attrs[k]);
+    }
+  }
+  if (text !== undefined && text !== null) el.textContent = text;
+  return el;
+}
+
+function svgEl(tag, attrs) {
+  var el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+  if (attrs) { for (var k in attrs) el.setAttribute(k, attrs[k]); }
+  return el;
+}
+
+// ================================================================
+// Tab switching
+// ================================================================
+
+var activeTab = 'arch';
+
+function switchTab(tab) {
+  activeTab = tab;
+  document.getElementById('tab-arch-btn').classList.toggle('active', tab === 'arch');
+  document.getElementById('tab-flow-btn').classList.toggle('active', tab === 'flow');
+  document.getElementById('tab-arch').classList.toggle('active', tab === 'arch');
+  document.getElementById('tab-flow').classList.toggle('active', tab === 'flow');
+
+  if (tab === 'arch') {
+    updateArchPrompt();
+  } else {
+    updateFlowPrompt();
+  }
+}
+
+document.getElementById('tab-arch-btn').addEventListener('click', function() { switchTab('arch'); });
+document.getElementById('tab-flow-btn').addEventListener('click', function() { switchTab('flow'); });
+
+// ================================================================
+// TAB 1: Architecture data & rendering (preserved from original)
+// ================================================================
+
+var LAYERS = {
+  terraform_modules: { label: 'Terraform Modules', y: 60, color: '#58a6ff' },
+  environments: { label: 'Environment Compositions', y: 340, color: '#3fb950' },
+  installer: { label: 'Installer Phases', y: 600, color: '#d2a8ff' },
+  packaging: { label: 'Packaging & Delivery', y: 860, color: '#f0883e' },
+  docs: { label: 'Documentation', y: 1080, color: '#ff7b72' },
+};
+
+var CONN_TYPES = {
+  module_dep: { label: 'Module dependency', color: '#58a6ff', dash: '' },
+  env_uses: { label: 'Environment uses module', color: '#3fb950', dash: '6 3' },
+  installer_runs: { label: 'Installer executes', color: '#d2a8ff', dash: '3 3' },
+  package_includes: { label: 'Package includes', color: '#f0883e', dash: '8 4' },
+  data_flow: { label: 'Data / output flow', color: '#ffa657', dash: '' },
+};
+
+var NODE_W = 180, NODE_H = 72;
+
+var nodes = [
+  { id: 'mod_networking', label: 'Networking', path: 'infra/terraform/modules/networking/', layer: 'terraform_modules', x: 80, y: 80, badge: 'Module', badgeColor: '#58a6ff', desc: 'VPC with /16 CIDR, 2 public + 2 private subnets across 2 AZs, Internet Gateway, NAT Gateway, and 4 security groups.', details: ['VPC with cidrsubnet() for subnets','IGW + NAT Gateway','SGs: app, db, lb, airflow','Outputs: vpc_id, subnet_ids, sg_ids'], tags: ['aws_vpc','aws_subnet','aws_security_group'] },
+  { id: 'mod_iam', label: 'IAM', path: 'infra/terraform/modules/iam/', layer: 'terraform_modules', x: 300, y: 80, badge: 'Module', badgeColor: '#58a6ff', desc: 'GitHub OIDC provider (conditional), CI role with ECR push + SSM, EC2 instance profile with ECR pull + Secrets Manager + CloudWatch.', details: ['enable_ci_role toggle (false for clients)','GitHub OIDC provider (conditional)','EC2 instance profile (always)','ECR pull, SM read, SSM, CW'], tags: ['aws_iam_role','oidc','instance_profile'] },
+  { id: 'mod_ecr', label: 'ECR', path: 'infra/terraform/modules/ecr/', layer: 'terraform_modules', x: 520, y: 80, badge: 'Module', badgeColor: '#58a6ff', desc: 'ECR repositories via for_each, immutable tags, scan on push, lifecycle policies, optional cross-account pull.', details: ['for_each on repository_names','IMMUTABLE tag mutability','Scan on push, lifecycle rules','Cross-account pull policy (optional)'], tags: ['aws_ecr_repository','lifecycle_policy'] },
+  { id: 'mod_ec2', label: 'EC2', path: 'infra/terraform/modules/ec2/', layer: 'terraform_modules', x: 740, y: 80, badge: 'Module', badgeColor: '#58a6ff', desc: 'Amazon Linux 2023 instance with Docker, separate EBS volume, IMDSv2 enforced, SSM-managed.', details: ['AL2023 AMI (lifecycle ignore)','Separate /dev/xvdf EBS for Docker','User data: Docker + Compose + AWS CLI','IMDSv2 enforced'], tags: ['aws_instance','ebs_volume','user_data'] },
+  { id: 'mod_docdb', label: 'DocumentDB', path: 'infra/terraform/modules/documentdb/', layer: 'terraform_modules', x: 960, y: 80, badge: 'Module', badgeColor: '#58a6ff', desc: 'MongoDB 5.0 compatible DocumentDB. TLS + audit logs, encrypted storage, conditional skip_final_snapshot.', details: ['DocDB 5.0 (MongoDB compat)','TLS + audit logs enabled','Encrypted at rest (KMS)','skip_final_snapshot conditional on env'], tags: ['aws_docdb_cluster','aws_docdb_cluster_instance'] },
+  { id: 'mod_lb', label: 'Load Balancer', path: 'infra/terraform/modules/load_balancer/', layer: 'terraform_modules', x: 1180, y: 80, badge: 'Module', badgeColor: '#58a6ff', desc: 'ALB for web (port 3000), NLB for API (port 8000). Conditional HTTPS/TLS listeners.', details: ['ALB -> web (port 3000)','NLB -> API (port 8000)','HTTPS conditional on cert_arn','Deletion protection in prod'], tags: ['aws_lb','aws_lb_target_group','aws_lb_listener'] },
+  { id: 'mod_secrets', label: 'Secrets', path: 'infra/terraform/modules/secrets/', layer: 'terraform_modules', x: 1400, y: 80, badge: 'Module', badgeColor: '#58a6ff', desc: 'Per-tenant Secrets Manager secret. IAM policy scoped to single secret ARN (ADR 007).', details: ['Secret: intellilake/{tenant}/{env}','IAM policy per-tenant scoped','Shell created by TF, populated by installer','ADR 007 isolation pattern'], tags: ['aws_secretsmanager_secret','iam_policy'] },
+  { id: 'mod_airflow', label: 'Airflow', path: 'infra/terraform/modules/airflow/', layer: 'terraform_modules', x: 1620, y: 80, badge: 'Module', badgeColor: '#58a6ff', desc: 'RDS Postgres 16.4, ElastiCache Redis 7.1 (conditional), ECS Fargate for webserver/scheduler/worker.', details: ['RDS Postgres 16.4 metadata DB','ElastiCache Redis 7.1 (conditional)','ECS: webserver + scheduler + worker','Random password in Secrets Manager'], tags: ['aws_ecs_service','aws_rds_cluster','aws_elasticache'] },
+
+  { id: 'env_shared', label: 'Shared', path: 'infra/terraform/environments/shared/', layer: 'environments', x: 200, y: 360, badge: 'Env', badgeColor: '#3fb950', desc: 'Cross-environment: ECR repos and GitHub OIDC. Applied once per AWS account.', details: ['ECR repos (shared across envs)','GitHub OIDC provider','One-time per-account setup','No networking or compute'], tags: ['ecr','iam'] },
+  { id: 'env_staging', label: 'Staging', path: 'infra/terraform/environments/staging/', layer: 'environments', x: 540, y: 360, badge: 'Env', badgeColor: '#3fb950', desc: 'Full stack, cost-optimized: single DocDB node, LocalExecutor, t3.medium.', details: ['1x DocDB node','Airflow LocalExecutor','t3.medium EC2','All 8 modules composed'], tags: ['staging','cost_optimized'] },
+  { id: 'env_production', label: 'Production', path: 'infra/terraform/environments/production/', layer: 'environments', x: 880, y: 360, badge: 'Env', badgeColor: '#3fb950', desc: 'Full stack HA: 2+ DocDB nodes, CeleryExecutor + Redis, t3.large, deletion protection.', details: ['2+ DocDB nodes','Airflow CeleryExecutor + Redis','t3.large EC2','Deletion protection on'], tags: ['production','high_availability'] },
+  { id: 'env_client', label: 'Client', path: 'infra/terraform/environments/client/', layer: 'environments', x: 1220, y: 360, badge: 'Env', badgeColor: '#3fb950', desc: 'Self-contained for dedicated-instance clients. No OIDC/CI role. Cross-account ECR pull.', details: ['enable_ci_role = false','Cross-account ECR pull','Self-contained (no shared env)','Packaged into release zip'], tags: ['client','dedicated_instance'] },
+
+  { id: 'phase_preflight', label: '0: Preflight', path: 'scripts/il-install.sh#phase0', layer: 'installer', x: 80, y: 620, badge: 'Phase', badgeColor: '#d2a8ff', desc: 'Validates tools (AWS CLI v2+, Terraform, jq, curl) and AWS auth.', details: ['Check: aws, terraform, jq, curl','Verify: aws sts get-caller-identity','Check: *.tf files exist','Print install links if missing'], tags: [] },
+  { id: 'phase_configure', label: '1: Configure', path: 'scripts/il-install.sh#phase1', layer: 'installer', x: 370, y: 620, badge: 'Phase', badgeColor: '#d2a8ff', desc: 'Interactive prompts: tenant ID, AWS region, CIDRs, EC2/DocDB, HTTPS, Snowflake, auth.', details: ['Tenant ID + display name','AWS region + AZs','Office/VPN CIDRs','Snowflake + Entra ID creds','Generates terraform.tfvars','Saves .install-state'], tags: [] },
+  { id: 'phase_infra', label: '2: Infrastructure', path: 'scripts/il-install.sh#phase2', layer: 'installer', x: 660, y: 620, badge: 'Phase', badgeColor: '#d2a8ff', desc: 'terraform init/plan/apply (~25 min). Captures outputs.', details: ['terraform init','terraform plan (user confirms)','terraform apply (~25 min)','Captures outputs to state file'], tags: [] },
+  { id: 'phase_secrets', label: '3: Secrets', path: 'scripts/il-install.sh#phase3', layer: 'installer', x: 950, y: 620, badge: 'Phase', badgeColor: '#d2a8ff', desc: 'Populates Secrets Manager with creds + DocDB endpoint from TF output.', details: ['aws secretsmanager put-secret-value','Includes DocDB endpoint from TF output','Snowflake creds into secret JSON','Two-phase bootstrap pattern'], tags: [] },
+  { id: 'phase_deploy', label: '4: Deploy', path: 'scripts/il-install.sh#phase4', layer: 'installer', x: 1240, y: 620, badge: 'Phase', badgeColor: '#d2a8ff', desc: 'SSM into EC2, ECR cross-account pull, start API + web containers.', details: ['SSM into EC2 instance','ECR cross-account login','Pull API + web images','Download DocDB TLS cert','docker run both containers'], tags: [] },
+  { id: 'phase_verify', label: '5: Verify', path: 'scripts/il-install.sh#phase5', layer: 'installer', x: 1530, y: 620, badge: 'Phase', badgeColor: '#d2a8ff', desc: 'Health checks, prints summary with DNS records and next steps.', details: ['Health check: API + web','Verify secret exists','Print LB DNS names','Print DNS CNAME records','Print Entra ID setup steps'], tags: [] },
+
+  { id: 'pkg_script', label: 'Package Script', path: 'scripts/package-client-infra.sh', layer: 'packaging', x: 200, y: 880, badge: 'Script', badgeColor: '#f0883e', desc: 'Bundles TF modules, client env, installer, docs into zip. Rewrites module paths.', details: ['Copies 7 TF modules','Copies client env files','Rewrites ../../modules/ to ./modules/','Includes installer + docs','Output: dist/*.zip'], tags: [] },
+  { id: 'pkg_zip', label: 'Release ZIP', path: 'dist/intellilake-infra-vX.Y.Z.zip', layer: 'packaging', x: 560, y: 880, badge: 'Artifact', badgeColor: '#f0883e', desc: 'Self-contained (~52KB, 33 files). Client extracts and runs il-install.sh.', details: ['modules/ (7 TF modules)','main.tf, variables.tf, outputs.tf, backend.tf','terraform.tfvars.example','il-install.sh','config/ (schema + examples)','prerequisites.md, SETUP-GUIDE.md'], tags: [] },
+  { id: 'pkg_installer', label: 'il-install.sh', path: 'scripts/il-install.sh', layer: 'packaging', x: 920, y: 880, badge: 'Script', badgeColor: '#f0883e', desc: 'Interactive installer (~500 lines). --resume, --phase, --dry-run, --auto-approve.', details: ['6 phases (0-5)','--resume from .install-state','--phase name re-run','--dry-run, --auto-approve','Secrets via -var (never on disk)'], tags: [] },
+  { id: 'pkg_delivery', label: 'Client Delivery', path: 'docs/clients/packaging-guide.md', layer: 'packaging', x: 1280, y: 880, badge: 'Process', badgeColor: '#f0883e', desc: 'IL team builds zip, sends to client. Client extracts and runs installer.', details: ['IL team: just tf-package-client vX.Y.Z','Send zip via secure channel','Client: unzip + ./il-install.sh','~1 hour end-to-end'], tags: [] },
+
+  { id: 'doc_prereqs', label: 'Prerequisites', path: 'docs/clients/prerequisites.md', layer: 'docs', x: 200, y: 1100, badge: 'Doc', badgeColor: '#ff7b72', desc: 'What to gather: AWS admin, Snowflake service user, Entra ID, network CIDRs.', details: ['AWS admin access + CLI','Snowflake: account, user, password, warehouse','Entra ID: client ID, tenant ID, secret','Network: office/VPN CIDRs'], tags: [] },
+  { id: 'doc_install', label: 'Install Guide', path: 'docs/clients/install-guide.md', layer: 'docs', x: 540, y: 1100, badge: 'Doc', badgeColor: '#ff7b72', desc: 'Phase-by-phase walkthrough, troubleshooting, post-install DNS/HTTPS/Entra.', details: ['Phase-by-phase walkthrough','Resource table (what TF creates)','Resumability guide','Troubleshooting table','Post-install: DNS, HTTPS, Entra'], tags: [] },
+  { id: 'doc_upgrade', label: 'Upgrade Guide', path: 'docs/clients/upgrade-guide.md', layer: 'docs', x: 880, y: 1100, badge: 'Doc', badgeColor: '#ff7b72', desc: 'Extract new zip, terraform plan/apply, pull new Docker images.', details: ['Extract new release zip','terraform plan (review changes)','terraform apply','Pull new Docker images','Rollback instructions'], tags: [] },
+  { id: 'doc_packaging', label: 'Packaging Guide', path: 'docs/clients/packaging-guide.md', layer: 'docs', x: 1220, y: 1100, badge: 'Doc', badgeColor: '#ff7b72', desc: 'Internal: how to build the release package, delivery process.', details: ['just tf-package-client vX.Y.Z','What gets included','Module path rewriting','Version tagging process','Delivery checklist'], tags: [] },
+];
+
+var connections = [
+  { from: 'mod_ec2', to: 'mod_networking', type: 'module_dep', label: 'subnet_id, sg_id' },
+  { from: 'mod_docdb', to: 'mod_networking', type: 'module_dep', label: 'subnet_ids, sg_id' },
+  { from: 'mod_lb', to: 'mod_networking', type: 'module_dep', label: 'vpc_id, subnet_ids, sg_id' },
+  { from: 'mod_airflow', to: 'mod_networking', type: 'module_dep', label: 'subnet_ids, sg_ids' },
+  { from: 'mod_ec2', to: 'mod_iam', type: 'module_dep', label: 'instance_profile' },
+  { from: 'mod_lb', to: 'mod_ec2', type: 'module_dep', label: 'instance_id' },
+  { from: 'mod_secrets', to: 'mod_iam', type: 'module_dep', label: 'role_arn (policy attach)' },
+  { from: 'env_shared', to: 'mod_ecr', type: 'env_uses' },
+  { from: 'env_shared', to: 'mod_iam', type: 'env_uses' },
+  { from: 'env_staging', to: 'mod_networking', type: 'env_uses' },
+  { from: 'env_staging', to: 'mod_iam', type: 'env_uses' },
+  { from: 'env_staging', to: 'mod_ec2', type: 'env_uses' },
+  { from: 'env_staging', to: 'mod_docdb', type: 'env_uses' },
+  { from: 'env_staging', to: 'mod_lb', type: 'env_uses' },
+  { from: 'env_staging', to: 'mod_secrets', type: 'env_uses' },
+  { from: 'env_staging', to: 'mod_airflow', type: 'env_uses' },
+  { from: 'env_production', to: 'mod_networking', type: 'env_uses' },
+  { from: 'env_production', to: 'mod_iam', type: 'env_uses' },
+  { from: 'env_production', to: 'mod_ec2', type: 'env_uses' },
+  { from: 'env_production', to: 'mod_docdb', type: 'env_uses' },
+  { from: 'env_production', to: 'mod_lb', type: 'env_uses' },
+  { from: 'env_production', to: 'mod_secrets', type: 'env_uses' },
+  { from: 'env_production', to: 'mod_airflow', type: 'env_uses' },
+  { from: 'env_client', to: 'mod_networking', type: 'env_uses' },
+  { from: 'env_client', to: 'mod_iam', type: 'env_uses' },
+  { from: 'env_client', to: 'mod_ec2', type: 'env_uses' },
+  { from: 'env_client', to: 'mod_docdb', type: 'env_uses' },
+  { from: 'env_client', to: 'mod_lb', type: 'env_uses' },
+  { from: 'env_client', to: 'mod_secrets', type: 'env_uses' },
+  { from: 'env_client', to: 'mod_airflow', type: 'env_uses' },
+  { from: 'phase_infra', to: 'env_client', type: 'installer_runs', label: 'terraform apply' },
+  { from: 'phase_secrets', to: 'mod_secrets', type: 'installer_runs', label: 'populate secret' },
+  { from: 'phase_deploy', to: 'mod_ec2', type: 'installer_runs', label: 'SSM docker run' },
+  { from: 'phase_deploy', to: 'mod_ecr', type: 'installer_runs', label: 'ECR pull' },
+  { from: 'phase_preflight', to: 'phase_configure', type: 'data_flow', label: 'tools OK' },
+  { from: 'phase_configure', to: 'phase_infra', type: 'data_flow', label: '.install-state' },
+  { from: 'phase_infra', to: 'phase_secrets', type: 'data_flow', label: 'TF outputs (DocDB endpoint)' },
+  { from: 'phase_secrets', to: 'phase_deploy', type: 'data_flow', label: 'secret populated' },
+  { from: 'phase_deploy', to: 'phase_verify', type: 'data_flow', label: 'containers running' },
+  { from: 'pkg_script', to: 'pkg_zip', type: 'package_includes', label: 'builds' },
+  { from: 'pkg_zip', to: 'pkg_installer', type: 'package_includes', label: 'contains' },
+  { from: 'pkg_zip', to: 'env_client', type: 'package_includes', label: 'contains TF files' },
+  { from: 'pkg_zip', to: 'doc_prereqs', type: 'package_includes', label: 'includes' },
+  { from: 'pkg_zip', to: 'doc_install', type: 'package_includes', label: 'includes' },
+  { from: 'pkg_installer', to: 'phase_preflight', type: 'package_includes', label: 'starts' },
+  { from: 'pkg_delivery', to: 'pkg_zip', type: 'package_includes', label: 'delivers' },
+];
+
+var PRESETS = {
+  full: { label: 'Full System', layers: Object.keys(LAYERS), conns: Object.keys(CONN_TYPES) },
+  modules: { label: 'Terraform Modules', layers: ['terraform_modules'], conns: ['module_dep'] },
+  environments: { label: 'Environments', layers: ['terraform_modules','environments'], conns: ['module_dep','env_uses'] },
+  installer: { label: 'Installer Flow', layers: ['installer','terraform_modules','environments'], conns: ['installer_runs','data_flow'] },
+  client_package: { label: 'Client Package', layers: ['packaging','docs','installer'], conns: ['package_includes'] },
+  client_journey: { label: 'Client Journey', layers: ['docs','installer','packaging','environments','terraform_modules'], conns: Object.keys(CONN_TYPES) },
+};
+
+var archState = {
+  activePreset: 'full',
+  visibleLayers: new Set(Object.keys(LAYERS)),
+  visibleConnTypes: new Set(Object.keys(CONN_TYPES)),
+  selectedNode: null,
+  zoom: 0.72, panX: 30, panY: 20,
+};
+
+// ── Architecture rendering ──
+
+function renderArch() {
+  renderDiagram();
+  renderArchControls();
+  if (activeTab === 'arch') updateArchPrompt();
+}
+
+function renderDiagram() {
+  var svg = document.getElementById('diagram');
+  var svgW = 1860, svgH = 1220;
+  svg.setAttribute('width', svgW);
+  svg.setAttribute('height', svgH);
+  svg.setAttribute('viewBox', '0 0 ' + svgW + ' ' + svgH);
+  clearChildren(svg);
+
+  var layerKeys = Object.keys(LAYERS);
+  for (var li = 0; li < layerKeys.length; li++) {
+    var layerId = layerKeys[li];
+    var layer = LAYERS[layerId];
+    var vis = archState.visibleLayers.has(layerId);
+    var op = vis ? 1 : 0.1;
+    svg.appendChild(svgEl('line', { 'class': 'layer-line', x1: 40, y1: layer.y - 10, x2: svgW - 40, y2: layer.y - 10, style: 'opacity:' + (op * 0.3) }));
+    var lbl = svgEl('text', { 'class': 'layer-label', x: 46, y: layer.y + 6, style: 'opacity:' + (op * 0.4) });
+    lbl.textContent = layer.label;
+    svg.appendChild(lbl);
+  }
+
+  for (var ci = 0; ci < connections.length; ci++) {
+    var conn = connections[ci];
+    var fromNode = null, toNode = null;
+    for (var ni = 0; ni < nodes.length; ni++) {
+      if (nodes[ni].id === conn.from) fromNode = nodes[ni];
+      if (nodes[ni].id === conn.to) toNode = nodes[ni];
+    }
+    if (!fromNode || !toNode) continue;
+    var fv = archState.visibleLayers.has(fromNode.layer);
+    var tv = archState.visibleLayers.has(toNode.layer);
+    var cv = archState.visibleConnTypes.has(conn.type);
+    var anyS = archState.selectedNode !== null;
+    var isR = archState.selectedNode === conn.from || archState.selectedNode === conn.to;
+    var cls = 'connection';
+    if (!fv || !tv || !cv) cls += ' dimmed';
+    else if (anyS && !isR) cls += ' dimmed';
+    else if (anyS && isR) cls += ' highlighted';
+    var ct = CONN_TYPES[conn.type];
+    var x1 = fromNode.x + NODE_W/2, y1 = fromNode.y + NODE_H/2;
+    var x2 = toNode.x + NODE_W/2, y2 = toNode.y + NODE_H/2;
+    var dx = x2-x1, dy = y2-y1;
+    var cx1 = x1+dx*0.1, cy1 = y1+dy*0.5, cx2 = x2-dx*0.1, cy2 = y2-dy*0.5;
+    var pa = { 'class': cls, d: 'M'+x1+','+y1+' C'+cx1+','+cy1+' '+cx2+','+cy2+' '+x2+','+y2, stroke: ct.color };
+    if (ct.dash) pa['stroke-dasharray'] = ct.dash;
+    svg.appendChild(svgEl('path', pa));
+    var aLen = 8, ang = Math.atan2(y2-cy2, x2-cx2);
+    var ax1 = x2-aLen*Math.cos(ang-0.4), ay1 = y2-aLen*Math.sin(ang-0.4);
+    var ax2 = x2-aLen*Math.cos(ang+0.4), ay2 = y2-aLen*Math.sin(ang+0.4);
+    var aCls = 'connection-arrow';
+    if (!fv||!tv||!cv) aCls += ' dimmed'; else if (anyS&&!isR) aCls += ' dimmed'; else if (anyS&&isR) aCls += ' highlighted';
+    svg.appendChild(svgEl('polygon', { 'class': aCls, points: x2+','+y2+' '+ax1+','+ay1+' '+ax2+','+ay2, fill: ct.color }));
+  }
+
+  for (var i = 0; i < nodes.length; i++) {
+    var node = nodes[i];
+    var nVis = archState.visibleLayers.has(node.layer);
+    var nSel = archState.selectedNode !== null;
+    var isThis = archState.selectedNode === node.id;
+    var nRel = false;
+    for (var ri = 0; ri < connections.length; ri++) {
+      var rc = connections[ri];
+      if ((rc.from === archState.selectedNode && rc.to === node.id) || (rc.to === archState.selectedNode && rc.from === node.id)) { nRel = true; break; }
+    }
+    var nCls = 'node-group';
+    if (isThis) nCls += ' selected'; else if (!nVis) nCls += ' dimmed'; else if (nSel && !nRel) nCls += ' dimmed';
+    var g = svgEl('g', { 'class': nCls, 'data-id': node.id });
+    g.addEventListener('click', (function(nid) { return function() { selectNode(nid); }; })(node.id));
+    g.appendChild(svgEl('rect', { 'class': 'node-rect', x: node.x, y: node.y, width: NODE_W, height: NODE_H }));
+    var bw = node.badge.length * 6.5 + 12;
+    g.appendChild(svgEl('rect', { 'class': 'node-badge-bg', x: node.x+10, y: node.y+8, width: bw, height: 16, fill: node.badgeColor }));
+    var bt = svgEl('text', { 'class': 'node-badge', x: node.x+10+bw/2, y: node.y+19, 'text-anchor': 'middle', fill: node.badgeColor });
+    bt.textContent = node.badge; g.appendChild(bt);
+    var tt = svgEl('text', { 'class': 'node-title', x: node.x+10, y: node.y+42 });
+    tt.textContent = node.label; g.appendChild(tt);
+    var sp = node.path.length > 28 ? '...' + node.path.slice(-25) : node.path;
+    var st = svgEl('text', { 'class': 'node-subtitle', x: node.x+10, y: node.y+58 });
+    st.textContent = sp; g.appendChild(st);
+    svg.appendChild(g);
+  }
+  updateArchTransform();
+}
+
+function renderArchControls() {
+  var pe = document.getElementById('presets');
+  clearChildren(pe);
+  var pk = Object.keys(PRESETS);
+  for (var i = 0; i < pk.length; i++) {
+    var b = createEl('button', { className: 'preset-btn' + (archState.activePreset === pk[i] ? ' active' : '') }, PRESETS[pk[i]].label);
+    b.addEventListener('click', (function(id) { return function() { applyPreset(id); }; })(pk[i]));
+    pe.appendChild(b);
+  }
+
+  var le = document.getElementById('layer-filters');
+  clearChildren(le);
+  var lk = Object.keys(LAYERS);
+  for (var j = 0; j < lk.length; j++) {
+    var fb = createEl('button', { className: 'filter-btn' + (archState.visibleLayers.has(lk[j]) ? ' active' : '') });
+    var d = createEl('span', { className: 'filter-dot' }); d.style.background = LAYERS[lk[j]].color;
+    fb.appendChild(d); fb.appendChild(document.createTextNode(LAYERS[lk[j]].label));
+    fb.addEventListener('click', (function(id) { return function() { toggleLayer(id); }; })(lk[j]));
+    le.appendChild(fb);
+  }
+
+  var ce = document.getElementById('connection-filters');
+  clearChildren(ce);
+  var ck = Object.keys(CONN_TYPES);
+  for (var c = 0; c < ck.length; c++) {
+    var cfb = createEl('button', { className: 'filter-btn' + (archState.visibleConnTypes.has(ck[c]) ? ' active' : '') });
+    var cd = createEl('span', { className: 'filter-dot' }); cd.style.background = CONN_TYPES[ck[c]].color;
+    cfb.appendChild(cd); cfb.appendChild(document.createTextNode(CONN_TYPES[ck[c]].label));
+    cfb.addEventListener('click', (function(id) { return function() { toggleConnType(id); }; })(ck[c]));
+    ce.appendChild(cfb);
+  }
+
+  var lg = document.getElementById('legend');
+  clearChildren(lg);
+  for (var l = 0; l < ck.length; l++) {
+    if (!archState.visibleConnTypes.has(ck[l])) continue;
+    var it = createEl('span', { className: 'legend-item' });
+    var ll = createEl('span', { className: 'legend-line' }); ll.style.background = CONN_TYPES[ck[l]].color;
+    it.appendChild(ll); it.appendChild(document.createTextNode(CONN_TYPES[ck[l]].label));
+    lg.appendChild(it);
+  }
+
+  renderFileTree();
+}
+
+function renderFileTree() {
+  var tree = document.getElementById('file-tree');
+  clearChildren(tree);
+  var items = [
+    [0,'infra/terraform/',''],[1,'modules/',''],[2,'networking/','VPC, subnets, SGs'],[2,'iam/','Roles, OIDC, profiles'],
+    [2,'ecr/','Container registries'],[2,'ec2/','Compute instances'],[2,'documentdb/','MongoDB-compat DB'],
+    [2,'load_balancer/','ALB + NLB'],[2,'secrets/','Secrets Manager'],[2,'airflow/','ECS + RDS + Redis'],
+    [1,'environments/',''],[2,'shared/','ECR + OIDC'],[2,'staging/','Full stack (small)'],
+    [2,'production/','Full stack (HA)'],[2,'client/','Dedicated instance'],
+    [0,'scripts/',''],[1,'il-install.sh','Interactive installer'],[1,'package-client-infra.sh','Build release zip'],
+    [0,'docs/clients/',''],[1,'prerequisites.md','What to gather'],[1,'install-guide.md','Step-by-step'],
+    [1,'upgrade-guide.md','Version upgrades'],[1,'packaging-guide.md','Internal: build zip'],
+  ];
+  for (var i = 0; i < items.length; i++) {
+    var row = items[i];
+    var div = document.createElement('div');
+    div.style.paddingLeft = (row[0]*14)+'px';
+    div.appendChild(document.createTextNode(row[1]));
+    if (row[2]) { var s = createEl('span', { style: { color: 'var(--accent)' } }, ' '+row[2]); div.appendChild(s); }
+    tree.appendChild(div);
+  }
+}
+
+function selectNode(id) {
+  if (archState.selectedNode === id) { archState.selectedNode = null; closeDetail(); }
+  else { archState.selectedNode = id; showDetail(id); }
+  renderArch();
+}
+
+function showDetail(id) {
+  var node = null;
+  for (var i = 0; i < nodes.length; i++) { if (nodes[i].id === id) { node = nodes[i]; break; } }
+  if (!node) return;
+  var panel = document.getElementById('detail-panel');
+  var content = document.getElementById('detail-content');
+  clearChildren(content);
+  content.appendChild(createEl('div', { className: 'detail-title' }, node.label));
+  content.appendChild(createEl('div', { className: 'detail-path' }, node.path));
+  content.appendChild(createEl('div', { className: 'detail-desc' }, node.desc));
+  if (node.details && node.details.length) {
+    content.appendChild(createEl('div', { className: 'detail-section-title' }, 'Key Details'));
+    var ul = createEl('ul', { className: 'detail-list' });
+    for (var d = 0; d < node.details.length; d++) ul.appendChild(createEl('li', null, node.details[d]));
+    content.appendChild(ul);
+  }
+  if (node.tags && node.tags.length) {
+    content.appendChild(createEl('div', { className: 'detail-section-title' }, 'Resources'));
+    var td = document.createElement('div');
+    for (var t = 0; t < node.tags.length; t++) td.appendChild(createEl('span', { className: 'detail-tag' }, node.tags[t]));
+    content.appendChild(td);
+  }
+  var inc = [], out = [];
+  for (var ci = 0; ci < connections.length; ci++) {
+    if (connections[ci].to === id) inc.push(connections[ci]);
+    if (connections[ci].from === id) out.push(connections[ci]);
+  }
+  if (inc.length) {
+    content.appendChild(createEl('div', { className: 'detail-section-title' }, 'Incoming'));
+    var iu = createEl('ul', { className: 'detail-list' });
+    for (var ii = 0; ii < inc.length; ii++) {
+      var src = null; for (var si = 0; si < nodes.length; si++) { if (nodes[si].id === inc[ii].from) { src = nodes[si]; break; } }
+      var txt = (src ? src.label : inc[ii].from); if (inc[ii].label) txt += ' (' + inc[ii].label + ')';
+      iu.appendChild(createEl('li', null, txt));
+    }
+    content.appendChild(iu);
+  }
+  if (out.length) {
+    content.appendChild(createEl('div', { className: 'detail-section-title' }, 'Outgoing'));
+    var ou = createEl('ul', { className: 'detail-list' });
+    for (var oi = 0; oi < out.length; oi++) {
+      var tgt = null; for (var ti = 0; ti < nodes.length; ti++) { if (nodes[ti].id === out[oi].to) { tgt = nodes[ti]; break; } }
+      var otxt = (tgt ? tgt.label : out[oi].to); if (out[oi].label) otxt += ' (' + out[oi].label + ')';
+      ou.appendChild(createEl('li', null, otxt));
+    }
+    content.appendChild(ou);
+  }
+  panel.classList.add('visible');
+}
+
+function closeDetail() {
+  document.getElementById('detail-panel').classList.remove('visible');
+  archState.selectedNode = null;
+  renderArch();
+}
+
+function applyPreset(id) {
+  archState.activePreset = id; archState.visibleLayers = new Set(PRESETS[id].layers); archState.visibleConnTypes = new Set(PRESETS[id].conns); archState.selectedNode = null;
+  document.getElementById('detail-panel').classList.remove('visible');
+  renderArch();
+}
+
+function toggleLayer(id) { if (archState.visibleLayers.has(id)) archState.visibleLayers.delete(id); else archState.visibleLayers.add(id); archState.activePreset = null; renderArch(); }
+function toggleConnType(id) { if (archState.visibleConnTypes.has(id)) archState.visibleConnTypes.delete(id); else archState.visibleConnTypes.add(id); archState.activePreset = null; renderArch(); }
+function toggleGroup(header) { header.parentElement.classList.toggle('collapsed'); }
+
+document.getElementById('presets-header').addEventListener('click', function() { toggleGroup(this); });
+document.getElementById('layers-header').addEventListener('click', function() { toggleGroup(this); });
+document.getElementById('conns-header').addEventListener('click', function() { toggleGroup(this); });
+document.getElementById('tree-header').addEventListener('click', function() { toggleGroup(this); });
+
+function updateArchTransform() {
+  document.getElementById('canvas-inner').style.transform = 'translate('+archState.panX+'px,'+archState.panY+'px) scale('+archState.zoom+')';
+  document.getElementById('zoom-label').textContent = Math.round(archState.zoom*100)+'%';
+}
+
+function zoomBy(d) { archState.zoom = Math.max(0.2, Math.min(2, archState.zoom+d)); updateArchTransform(); }
+function resetView() { archState.zoom = 0.72; archState.panX = 30; archState.panY = 20; updateArchTransform(); }
+
+document.getElementById('zoom-out').addEventListener('click', function() { zoomBy(-0.15); });
+document.getElementById('zoom-in').addEventListener('click', function() { zoomBy(0.15); });
+document.getElementById('zoom-reset').addEventListener('click', resetView);
+document.getElementById('detail-close-btn').addEventListener('click', closeDetail);
+
+var isPanning = false, panStartX = 0, panStartY = 0;
+document.getElementById('canvas-area').addEventListener('mousedown', function(e) {
+  if (e.target.closest('.detail-panel') || e.target.closest('.zoom-controls') || e.target.closest('.legend') || e.target.closest('.node-group')) return;
+  isPanning = true; panStartX = e.clientX - archState.panX; panStartY = e.clientY - archState.panY;
+});
+window.addEventListener('mousemove', function(e) { if (!isPanning) return; archState.panX = e.clientX - panStartX; archState.panY = e.clientY - panStartY; updateArchTransform(); });
+window.addEventListener('mouseup', function() { isPanning = false; });
+document.getElementById('canvas-area').addEventListener('wheel', function(e) { e.preventDefault(); zoomBy(e.deltaY > 0 ? -0.06 : 0.06); }, { passive: false });
+
+function updateArchPrompt() {
+  var vn = nodes.filter(function(n) { return archState.visibleLayers.has(n.layer); });
+  var prompt = '';
+  if (archState.selectedNode) {
+    var node = null; for (var i = 0; i < nodes.length; i++) { if (nodes[i].id === archState.selectedNode) { node = nodes[i]; break; } }
+    if (node) {
+      var rel = [];
+      for (var ci = 0; ci < connections.length; ci++) {
+        var c = connections[ci];
+        if (c.from === node.id || c.to === node.id) {
+          var oid = c.from === node.id ? c.to : c.from;
+          for (var ni = 0; ni < nodes.length; ni++) { if (nodes[ni].id === oid) { rel.push(nodes[ni].label); break; } }
+        }
+      }
+      prompt = 'Tell me about the ' + node.label + ' component at ' + node.path + '. ' + node.desc;
+      if (rel.length) prompt += ' It connects to: ' + rel.join(', ') + '.';
+    }
+  } else if (archState.activePreset && PRESETS[archState.activePreset]) {
+    var p = PRESETS[archState.activePreset];
+    prompt = 'Show me the IntelliLake ' + p.label.toLowerCase() + ' architecture covering: ' + p.layers.map(function(l){ return LAYERS[l].label; }).join(', ') + '. ' + vn.length + ' components visible.';
+  } else {
+    prompt = 'The IntelliLake infrastructure has ' + nodes.length + ' components across ' + Object.keys(LAYERS).length + ' layers. Currently showing ' + vn.length + ' components.';
+  }
+  document.getElementById('prompt-text').textContent = prompt;
+}
+
+// ================================================================
+// TAB 2: Deployment Flow
+// ================================================================
+
+var flowHighlight = null;
+
+function renderFlow() {
+  var container = document.getElementById('flow-container');
+  clearChildren(container);
+
+  // ── Section 1: IntelliLake Team — Packaging ──
+  var s1 = createEl('div', { className: 'flow-section' });
+  var h1 = createEl('div', { className: 'flow-section-header' });
+  var b1 = createEl('span', { className: 'flow-section-badge' }, 'INTELLILAKE TEAM');
+  b1.style.background = 'rgba(240,136,62,0.15)'; b1.style.color = '#f0883e'; b1.style.border = '1px solid rgba(240,136,62,0.3)';
+  h1.appendChild(b1);
+  h1.appendChild(createEl('span', { className: 'flow-section-title' }, 'Build & Package Release'));
+  h1.appendChild(createEl('span', { className: 'flow-section-subtitle' }, 'scripts/package-client-infra.sh'));
+  s1.appendChild(h1);
+
+  var lane1 = createEl('div', { className: 'swimlane' });
+  var label1 = createEl('div', { className: 'swimlane-label' }, 'Packaging');
+  lane1.appendChild(label1);
+  var content1 = createEl('div', { className: 'swimlane-content' });
+
+  var packSteps = [
+    { num: 'Step 1', title: 'Tag Release', desc: 'Version the codebase, ensure all TF modules are tested and up to date.', cmd: 'git tag v2.1.0' },
+    { num: 'Step 2', title: 'Run Package Script', desc: 'Bundles 7 TF modules, client env, installer script, docs, and config schemas.', cmd: 'just tf-package-client v2.1.0' },
+    { num: 'Step 3', title: 'Path Rewriting', desc: 'Module source paths rewritten from ../../modules/ to ./modules/ for portability.', cmd: null },
+    { num: 'Step 4', title: 'Deliver to Client', desc: 'Send the zip via secure channel. Client extracts into any directory.', cmd: null },
+  ];
+
+  for (var pi = 0; pi < packSteps.length; pi++) {
+    if (pi > 0) content1.appendChild(createEl('div', { className: 'flow-arrow' }, '\u2192'));
+    var card = createEl('div', { className: 'flow-card' });
+    var cn = createEl('div', { className: 'flow-card-num' }, packSteps[pi].num);
+    cn.style.color = '#f0883e';
+    card.appendChild(cn);
+    card.appendChild(createEl('div', { className: 'flow-card-title' }, packSteps[pi].title));
+    card.appendChild(createEl('div', { className: 'flow-card-desc' }, packSteps[pi].desc));
+    if (packSteps[pi].cmd) card.appendChild(createEl('div', { className: 'flow-card-cmd' }, packSteps[pi].cmd));
+    content1.appendChild(card);
+  }
+
+  lane1.appendChild(content1);
+  s1.appendChild(lane1);
+  container.appendChild(s1);
+
+  // ── What gets delivered ──
+  var s2 = createEl('div', { className: 'flow-section' });
+  var h2 = createEl('div', { className: 'flow-section-header' });
+  var b2 = createEl('span', { className: 'flow-section-badge' }, 'DELIVERABLE');
+  b2.style.background = 'rgba(88,166,255,0.15)'; b2.style.color = '#58a6ff'; b2.style.border = '1px solid rgba(88,166,255,0.3)';
+  h2.appendChild(b2);
+  h2.appendChild(createEl('span', { className: 'flow-section-title' }, 'Release Package Contents'));
+  h2.appendChild(createEl('span', { className: 'flow-section-subtitle' }, 'intellilake-infra-v2.1.0.zip  ~52KB, 33 files'));
+  s2.appendChild(h2);
+
+  var grid = createEl('div', { className: 'delivery-grid' });
+  var deliveryItems = [
+    { title: 'Terraform Modules', color: '#58a6ff', files: ['modules/networking/','modules/iam/','modules/ecr/','modules/ec2/','modules/documentdb/','modules/load_balancer/','modules/secrets/','modules/airflow/'] },
+    { title: 'Root TF Files', color: '#3fb950', files: ['main.tf','variables.tf','outputs.tf','backend.tf','terraform.tfvars.example'] },
+    { title: 'Installer', color: '#d2a8ff', files: ['il-install.sh','(~500 lines, 6 phases)','--resume, --phase flags','--dry-run, --auto-approve'] },
+    { title: 'Config Templates', color: '#ffa657', files: ['config/tenant.schema.json','config/*.example.json','(JSON Schema validation)'] },
+    { title: 'Documentation', color: '#ff7b72', files: ['prerequisites.md','SETUP-GUIDE.md','(upgrade-guide.md)'] },
+  ];
+
+  for (var di = 0; di < deliveryItems.length; di++) {
+    var item = createEl('div', { className: 'delivery-item' });
+    var titleDiv = createEl('div', { className: 'delivery-item-title' });
+    var dot = createEl('span', { className: 'delivery-item-dot' }); dot.style.background = deliveryItems[di].color;
+    titleDiv.appendChild(dot);
+    titleDiv.appendChild(document.createTextNode(deliveryItems[di].title));
+    item.appendChild(titleDiv);
+    var list = createEl('ul', { className: 'delivery-item-list' });
+    for (var fi = 0; fi < deliveryItems[di].files.length; fi++) {
+      list.appendChild(createEl('li', null, deliveryItems[di].files[fi]));
+    }
+    item.appendChild(list);
+    grid.appendChild(item);
+  }
+
+  s2.appendChild(grid);
+  container.appendChild(s2);
+
+  // ── Handoff divider ──
+  var handoff = createEl('div', { className: 'handoff-divider' });
+  handoff.appendChild(createEl('div', { className: 'handoff-line' }));
+  handoff.appendChild(createEl('span', { className: 'handoff-badge' }, 'HANDOFF: ZIP delivered to client'));
+  handoff.appendChild(createEl('div', { className: 'handoff-line' }));
+  container.appendChild(handoff);
+
+  // ── Section 3: Client — Installation ──
+  var s3 = createEl('div', { className: 'flow-section' });
+  var h3 = createEl('div', { className: 'flow-section-header' });
+  var b3 = createEl('span', { className: 'flow-section-badge' }, 'CLIENT');
+  b3.style.background = 'rgba(63,185,80,0.15)'; b3.style.color = '#3fb950'; b3.style.border = '1px solid rgba(63,185,80,0.3)';
+  h3.appendChild(b3);
+  h3.appendChild(createEl('span', { className: 'flow-section-title' }, 'Installation Process'));
+  h3.appendChild(createEl('span', { className: 'flow-section-subtitle' }, './il-install.sh  ~45 min interactive'));
+  s3.appendChild(h3);
+
+  // Phase tracker
+  var tracker = createEl('div', { className: 'flow-tracker' });
+  var phases = [
+    { id: 'pre', label: '0 Preflight', color: '#d2a8ff' },
+    { id: 'cfg', label: '1 Configure', color: '#d2a8ff' },
+    { id: 'inf', label: '2 Infrastructure', color: '#58a6ff' },
+    { id: 'sec', label: '3 Secrets', color: '#ffa657' },
+    { id: 'dep', label: '4 Deploy', color: '#3fb950' },
+    { id: 'ver', label: '5 Verify', color: '#3fb950' },
+  ];
+  for (var ti = 0; ti < phases.length; ti++) {
+    var ts = createEl('button', { className: 'flow-tracker-step' + (flowHighlight === phases[ti].id ? ' highlight' : '') });
+    var td = createEl('span', { className: 'flow-tracker-dot' }); td.style.background = phases[ti].color;
+    ts.appendChild(td);
+    ts.appendChild(document.createTextNode(phases[ti].label));
+    ts.addEventListener('click', (function(pid) { return function() { flowHighlight = flowHighlight === pid ? null : pid; renderFlow(); updateFlowPrompt(); }; })(phases[ti].id));
+    tracker.appendChild(ts);
+  }
+  s3.appendChild(tracker);
+
+  // Prerequisite lane
+  var prereqLane = createEl('div', { className: 'swimlane' });
+  prereqLane.appendChild(createEl('div', { className: 'swimlane-label' }, 'Before Starting'));
+  var prereqContent = createEl('div', { className: 'swimlane-content' });
+  var prereqCards = [
+    { title: 'AWS Admin Access', desc: 'CLI configured with admin credentials. Verify with aws sts get-caller-identity.' },
+    { title: 'Snowflake Creds', desc: 'Account locator, service user, password, warehouse, database name.' },
+    { title: 'Entra ID / Cognito', desc: 'Client ID, tenant ID, client secret, security group UUIDs.' },
+    { title: 'Network Info', desc: 'Office/VPN CIDRs in notation (e.g. 203.0.113.0/24). Custom domain names.' },
+  ];
+  for (var pri = 0; pri < prereqCards.length; pri++) {
+    var pc = createEl('div', { className: 'flow-card' });
+    var pn = createEl('div', { className: 'flow-card-num' }, 'PREREQUISITE'); pn.style.color = '#ff7b72';
+    pc.appendChild(pn);
+    pc.appendChild(createEl('div', { className: 'flow-card-title' }, prereqCards[pri].title));
+    pc.appendChild(createEl('div', { className: 'flow-card-desc' }, prereqCards[pri].desc));
+    prereqContent.appendChild(pc);
+  }
+  prereqLane.appendChild(prereqContent);
+  s3.appendChild(prereqLane);
+
+  // Phase 0+1 lane
+  var setupLane = createEl('div', { className: 'swimlane' });
+  setupLane.appendChild(createEl('div', { className: 'swimlane-label' }, 'Setup'));
+  var setupContent = createEl('div', { className: 'swimlane-content' });
+  var setupCards = [
+    { id: 'pre', num: 'PHASE 0', title: 'Preflight', desc: 'Validates tools: AWS CLI v2+, Terraform 1.5+, jq, curl. Verifies AWS auth and checks TF files exist.', cmd: null },
+    { id: 'cfg', num: 'PHASE 1', title: 'Configure', desc: 'Interactive prompts for all values: tenant identity, AWS region/AZs, network CIDRs, instance sizes, credentials. Generates terraform.tfvars and saves .install-state for resumability.', cmd: null },
+  ];
+  for (var sui = 0; sui < setupCards.length; sui++) {
+    if (sui > 0) setupContent.appendChild(createEl('div', { className: 'flow-arrow' }, '\u2192'));
+    var sc = createEl('div', { className: 'flow-card' + (flowHighlight === setupCards[sui].id ? ' active-step' : '') });
+    var sn = createEl('div', { className: 'flow-card-num' }, setupCards[sui].num); sn.style.color = '#d2a8ff';
+    sc.appendChild(sn);
+    sc.appendChild(createEl('div', { className: 'flow-card-title' }, setupCards[sui].title));
+    sc.appendChild(createEl('div', { className: 'flow-card-desc' }, setupCards[sui].desc));
+    setupContent.appendChild(sc);
+  }
+  setupLane.appendChild(setupContent);
+  s3.appendChild(setupLane);
+
+  // Phase 2+3 lane
+  var infraLane = createEl('div', { className: 'swimlane' });
+  infraLane.appendChild(createEl('div', { className: 'swimlane-label' }, 'Provision'));
+  var infraContent = createEl('div', { className: 'swimlane-content' });
+  var infraCards = [
+    { id: 'inf', num: 'PHASE 2', title: 'Infrastructure', desc: 'terraform init, plan (user confirms), apply. ~25 min. Creates VPC, EC2, DocumentDB, load balancers, IAM, Secrets Manager shell. Captures outputs to state file.', cmd: 'terraform apply -var="docdb_password=***"' },
+    { id: 'sec', num: 'PHASE 3', title: 'Secrets', desc: 'Populates the Secrets Manager entry with actual creds + DocDB endpoint from TF output. This solves the bootstrap problem: TF creates the secret shell, then the installer fills it with the DocDB endpoint TF just provisioned.', cmd: 'aws secretsmanager put-secret-value ...' },
+  ];
+  for (var ini = 0; ini < infraCards.length; ini++) {
+    if (ini > 0) infraContent.appendChild(createEl('div', { className: 'flow-arrow' }, '\u2192'));
+    var ic = createEl('div', { className: 'flow-card' + (flowHighlight === infraCards[ini].id ? ' active-step' : '') });
+    ic.style.maxWidth = '320px';
+    var iNumDiv = createEl('div', { className: 'flow-card-num' }, infraCards[ini].num);
+    iNumDiv.style.color = infraCards[ini].id === 'inf' ? '#58a6ff' : '#ffa657';
+    ic.appendChild(iNumDiv);
+    ic.appendChild(createEl('div', { className: 'flow-card-title' }, infraCards[ini].title));
+    ic.appendChild(createEl('div', { className: 'flow-card-desc' }, infraCards[ini].desc));
+    if (infraCards[ini].cmd) ic.appendChild(createEl('div', { className: 'flow-card-cmd' }, infraCards[ini].cmd));
+    infraContent.appendChild(ic);
+  }
+  infraLane.appendChild(infraContent);
+  s3.appendChild(infraLane);
+
+  // Phase 4+5 lane
+  var deployLane = createEl('div', { className: 'swimlane' });
+  deployLane.appendChild(createEl('div', { className: 'swimlane-label' }, 'Deploy & Verify'));
+  var deployContent = createEl('div', { className: 'swimlane-content' });
+  var deployCards = [
+    { id: 'dep', num: 'PHASE 4', title: 'Deploy', desc: 'SSMs into EC2, authenticates to IntelliLake ECR (cross-account), pulls API + web Docker images, downloads DocumentDB TLS certificate, starts both containers.', cmd: 'aws ssm start-session ...' },
+    { id: 'ver', num: 'PHASE 5', title: 'Verify', desc: 'Health checks API + web containers via SSM. Verifies Secrets Manager entry. Prints infrastructure summary, DNS CNAME records to create, and remaining manual steps.' , cmd: './il-install.sh --phase verify' },
+  ];
+  for (var dpi = 0; dpi < deployCards.length; dpi++) {
+    if (dpi > 0) deployContent.appendChild(createEl('div', { className: 'flow-arrow' }, '\u2192'));
+    var dc = createEl('div', { className: 'flow-card' + (flowHighlight === deployCards[dpi].id ? ' active-step' : '') });
+    dc.style.maxWidth = '320px';
+    var dNumDiv = createEl('div', { className: 'flow-card-num' }, deployCards[dpi].num); dNumDiv.style.color = '#3fb950';
+    dc.appendChild(dNumDiv);
+    dc.appendChild(createEl('div', { className: 'flow-card-title' }, deployCards[dpi].title));
+    dc.appendChild(createEl('div', { className: 'flow-card-desc' }, deployCards[dpi].desc));
+    if (deployCards[dpi].cmd) dc.appendChild(createEl('div', { className: 'flow-card-cmd' }, deployCards[dpi].cmd));
+    deployContent.appendChild(dc);
+  }
+  deployLane.appendChild(deployContent);
+  s3.appendChild(deployLane);
+
+  container.appendChild(s3);
+
+  // ── Section 4: Post-Install ──
+  var s4 = createEl('div', { className: 'flow-section' });
+  var h4 = createEl('div', { className: 'flow-section-header' });
+  var b4 = createEl('span', { className: 'flow-section-badge' }, 'POST-INSTALL');
+  b4.style.background = 'rgba(63,185,80,0.15)'; b4.style.color = '#3fb950'; b4.style.border = '1px solid rgba(63,185,80,0.3)';
+  h4.appendChild(b4);
+  h4.appendChild(createEl('span', { className: 'flow-section-title' }, 'Manual Steps After Installation'));
+  h4.appendChild(createEl('span', { className: 'flow-section-subtitle' }, 'Printed by Phase 5 output'));
+  s4.appendChild(h4);
+
+  var postGrid = createEl('div', { className: 'post-install-grid' });
+  var postCards = [
+    { num: 'STEP 1', title: 'DNS Setup', desc: 'Create CNAME records pointing your domains to the load balancer DNS names from the installer output. app.yourdomain.com to ALB, api.yourdomain.com to NLB.' },
+    { num: 'STEP 2', title: 'HTTPS Certificate', desc: 'If not configured during install: request ACM cert, complete DNS validation, then terraform apply with the certificate_arn variable.' },
+    { num: 'STEP 3', title: 'Entra ID Configuration', desc: 'Register SPA app in Entra Admin Center. Set redirect URI, enable tokens, create client secret, add API permissions, map security groups to roles.' },
+  ];
+  for (var pci = 0; pci < postCards.length; pci++) {
+    var postCard = createEl('div', { className: 'post-card' });
+    postCard.appendChild(createEl('div', { className: 'post-card-num' }, postCards[pci].num));
+    postCard.appendChild(createEl('div', { className: 'post-card-title' }, postCards[pci].title));
+    postCard.appendChild(createEl('div', { className: 'post-card-desc' }, postCards[pci].desc));
+    postGrid.appendChild(postCard);
+  }
+  s4.appendChild(postGrid);
+  container.appendChild(s4);
+
+  // ── Section 5: Resumability ──
+  var s5 = createEl('div', { className: 'flow-section' });
+  var h5 = createEl('div', { className: 'flow-section-header' });
+  var b5 = createEl('span', { className: 'flow-section-badge' }, 'RECOVERY');
+  b5.style.background = 'rgba(210,168,255,0.15)'; b5.style.color = '#d2a8ff'; b5.style.border = '1px solid rgba(210,168,255,0.3)';
+  h5.appendChild(b5);
+  h5.appendChild(createEl('span', { className: 'flow-section-title' }, 'Resumability & Re-runs'));
+  s5.appendChild(h5);
+
+  var resumeLane = createEl('div', { className: 'swimlane' });
+  resumeLane.appendChild(createEl('div', { className: 'swimlane-label' }, 'If Interrupted'));
+  var resumeContent = createEl('div', { className: 'swimlane-content' });
+  var resumeCards = [
+    { title: 'Resume All', desc: 'Loads .install-state, skips completed phases, continues from where it stopped.', cmd: './il-install.sh --resume' },
+    { title: 'Re-run Phase', desc: 'Re-execute a specific phase. Useful for re-deploying or re-verifying.', cmd: './il-install.sh --phase deploy' },
+    { title: 'Dry Run', desc: 'Shows what would happen without making changes. Good for reviewing before committing.', cmd: './il-install.sh --dry-run' },
+  ];
+  for (var rci = 0; rci < resumeCards.length; rci++) {
+    var rc = createEl('div', { className: 'flow-card' });
+    var rn = createEl('div', { className: 'flow-card-num' }, 'OPTION'); rn.style.color = '#d2a8ff';
+    rc.appendChild(rn);
+    rc.appendChild(createEl('div', { className: 'flow-card-title' }, resumeCards[rci].title));
+    rc.appendChild(createEl('div', { className: 'flow-card-desc' }, resumeCards[rci].desc));
+    rc.appendChild(createEl('div', { className: 'flow-card-cmd' }, resumeCards[rci].cmd));
+    resumeContent.appendChild(rc);
+  }
+  resumeLane.appendChild(resumeContent);
+  s5.appendChild(resumeLane);
+  container.appendChild(s5);
+}
+
+var phasePromptMap = {
+  pre: 'Phase 0 (Preflight) validates that AWS CLI v2+, Terraform 1.5+, jq, and curl are installed, and that AWS credentials are configured.',
+  cfg: 'Phase 1 (Configure) collects all deployment parameters interactively: tenant ID, AWS region, network CIDRs, EC2/DocDB sizing, Snowflake credentials, and auth provider details. Saves to .install-state for resumability.',
+  inf: 'Phase 2 (Infrastructure) runs terraform init/plan/apply to provision VPC, EC2, DocumentDB, load balancers, IAM roles, and Secrets Manager. Takes ~25 minutes.',
+  sec: 'Phase 3 (Secrets) solves the bootstrap problem: Terraform created the secret shell, but the DocDB endpoint was not known until Phase 2 completed. This phase populates the secret with the actual connection string and Snowflake credentials.',
+  dep: 'Phase 4 (Deploy) SSMs into the EC2 instance, authenticates to IntelliLake ECR (cross-account pull), downloads Docker images and the DocumentDB TLS certificate, then starts both API and web containers.',
+  ver: 'Phase 5 (Verify) runs health checks against both containers, verifies the Secrets Manager entry, and prints DNS CNAME records to create plus remaining manual steps (HTTPS, Entra ID).',
+};
+
+function updateFlowPrompt() {
+  var prompt = '';
+  if (flowHighlight && phasePromptMap[flowHighlight]) {
+    prompt = phasePromptMap[flowHighlight];
+  } else {
+    prompt = 'Client deployment flow: IL team packages release (scripts/package-client-infra.sh), delivers zip with 7 TF modules + installer + docs. Client runs ./il-install.sh which walks through 6 phases: preflight, configure, infrastructure (~25 min), secrets bootstrap, deploy containers, verify. Post-install: DNS, HTTPS, Entra ID.';
+  }
+  document.getElementById('prompt-text').textContent = prompt;
+}
+
+// ================================================================
+// Copy button
+// ================================================================
+
+document.getElementById('copy-btn').addEventListener('click', function() {
+  var text = document.getElementById('prompt-text').textContent;
+  navigator.clipboard.writeText(text).then(function() {
+    var btn = document.getElementById('copy-btn');
+    btn.textContent = 'Copied!';
+    btn.classList.add('copied');
+    setTimeout(function() { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1500);
+  });
+});
+
+// ================================================================
+// Init
+// ================================================================
+
+renderArch();
+renderFlow();
+
+</script>
+</body>
+</html>
