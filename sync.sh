@@ -2,6 +2,10 @@
 # sync.sh — Pull playground HTML files from source repos and regenerate index.
 set -euo pipefail
 
+# Always authenticate as IL-SCoussens for cloning source repos and pushing.
+export GH_TOKEN
+GH_TOKEN=$(gh auth token --user IL-SCoussens)
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DOCS_DIR="$SCRIPT_DIR/docs"
 SOURCES_FILE="$SCRIPT_DIR/sources.json"

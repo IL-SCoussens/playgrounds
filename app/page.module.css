@@ -1,0 +1,107 @@
+.main {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 3rem 1.5rem;
+}
+
+.header {
+  text-align: center;
+  margin-bottom: 3rem;
+}
+
+.title {
+  font-size: 2rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+.subtitle {
+  color: var(--text-muted);
+  font-size: 1.1rem;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 1.25rem;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.5rem;
+  transition: background 0.15s, border-color 0.15s;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.card:hover {
+  background: var(--surface-hover);
+  border-color: var(--accent);
+}
+
+.icon {
+  font-size: 1.75rem;
+  width: 3rem;
+  height: 3rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: rgba(108, 99, 255, 0.12);
+}
+
+.icon[data-color="green"] { background: rgba(52, 211, 153, 0.12); }
+.icon[data-color="amber"] { background: rgba(251, 191, 36, 0.12); }
+.icon[data-color="blue"] { background: rgba(96, 165, 250, 0.12); }
+.icon[data-color="purple"] { background: rgba(167, 139, 250, 0.12); }
+.icon[data-color="cyan"] { background: rgba(34, 211, 238, 0.12); }
+
+.cardTitle {
+  font-size: 1.15rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.branch {
+  font-size: 0.7rem;
+  font-weight: 500;
+  padding: 0.15rem 0.5rem;
+  border-radius: 99px;
+  background: rgba(108, 99, 255, 0.15);
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.cardDescription {
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  line-height: 1.5;
+  flex: 1;
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.25rem;
+}
+
+.tag {
+  font-size: 0.72rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 99px;
+  font-weight: 500;
+}
+
+.tag[data-color="accent"] { background: rgba(108, 99, 255, 0.15); color: var(--accent); }
+.tag[data-color="green"] { background: rgba(52, 211, 153, 0.15); color: var(--green); }
+.tag[data-color="amber"] { background: rgba(251, 191, 36, 0.15); color: var(--amber); }
+.tag[data-color="blue"] { background: rgba(96, 165, 250, 0.15); color: var(--blue); }
+.tag[data-color="purple"] { background: rgba(167, 139, 250, 0.15); color: var(--purple); }
+.tag[data-color="cyan"] { background: rgba(34, 211, 238, 0.15); color: var(--cyan); }
