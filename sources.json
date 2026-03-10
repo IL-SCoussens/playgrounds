@@ -51,6 +51,20 @@
             { "label": "Parser", "color": "green" },
             { "label": "Hierarchy", "color": "amber" }
           ]
+        },
+        {
+          "src": "py/notebooks/bronze_pipeline_playground.html",
+          "dest": "bronze-pipeline.html",
+          "title": "Bronze Pipeline Playground",
+          "description": "Step through each Bronze preprocessing stage interactively: canonical dedup, acronym-aware title case, blank fill, modifier stripping (with collision and empty guards), and multi-parent resolution. Toggle stages, edit config, paste custom CSV data, and see exactly how rows transform.",
+          "icon": "\ud83d\udd29",
+          "icon_color": "amber",
+          "tags": [
+            { "label": "Bronze", "color": "amber" },
+            { "label": "Pipeline Stages", "color": "cyan" },
+            { "label": "Interactive", "color": "green" },
+            { "label": "Data Quality", "color": "purple" }
+          ]
         }
       ]
     }
