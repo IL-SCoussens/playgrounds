@@ -1,0 +1,962 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bronze Pipeline Playground</title>
+<style>
+:root {
+  --bg: #0f0f17; --surface: #1a1a2e; --card: #1f1f35; --border: #2a2a44;
+  --text: #e4e4ef; --muted: #7878a0; --accent: #818cf8;
+  --blue: #3b82f6; --red: #ef4444; --purple: #a855f7; --green: #22c55e;
+  --amber: #f59e0b; --cyan: #06b6d4; --pink: #ec4899;
+  --radius: 8px; --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --mono: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--font); background: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; }
+.header { padding: 16px 24px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 16px; }
+.header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.3px; }
+.header .badge { font-size: 11px; padding: 3px 8px; background: var(--accent); color: #fff; border-radius: 10px; font-weight: 500; }
+.toolbar { padding: 12px 24px; border-bottom: 1px solid var(--border); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.toolbar .label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; margin-right: 4px; }
+.preset-btn { padding: 6px 14px; border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: var(--radius); cursor: pointer; font-size: 13px; font-family: var(--font); transition: all 0.15s; }
+.preset-btn:hover { border-color: var(--accent); }
+.preset-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.toolbar .sep { width: 1px; height: 24px; background: var(--border); margin: 0 8px; }
+.input-editor { display: none; padding: 12px 24px; border-bottom: 1px solid var(--border); background: var(--surface); }
+.input-editor.show { display: block; }
+.input-editor textarea { width: 100%; height: 160px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; font-family: var(--mono); font-size: 12px; resize: vertical; line-height: 1.5; }
+.input-editor .hint { font-size: 11px; color: var(--muted); margin-top: 6px; }
+.content { flex: 1; display: flex; overflow: hidden; }
+.sidebar { width: 280px; min-width: 280px; border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow-y: auto; }
+.pipeline-flow { padding: 16px; flex: 1; }
+.pipeline-flow h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); margin-bottom: 12px; }
+.stage-card { padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 4px; cursor: pointer; transition: all 0.15s; position: relative; border-left: 3px solid transparent; }
+.stage-card:hover { background: var(--card); }
+.stage-card.selected { background: var(--card); border-color: var(--accent); }
+.stage-card.disabled { opacity: 0.4; }
+.stage-card .name { font-size: 13px; font-weight: 600; }
+.stage-card .row-count { font-size: 11px; color: var(--muted); font-family: var(--mono); margin-top: 2px; }
+.stage-card .row-count .delta { font-weight: 600; }
+.stage-card .row-count .delta.neg { color: var(--red); }
+.stage-card .row-count .delta.pos { color: var(--green); }
+.stage-card .row-count .delta.zero { color: var(--muted); }
+.stage-card .toggle { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); }
+.stage-connector { height: 16px; display: flex; align-items: center; justify-content: center; }
+.stage-connector .arrow { width: 1px; height: 16px; background: var(--border); position: relative; }
+.stage-connector .arrow::after { content: ''; position: absolute; bottom: 0; left: -3px; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 5px solid var(--border); }
+.config-panel { padding: 16px; border-top: 1px solid var(--border); }
+.config-panel h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); margin-bottom: 10px; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+.config-panel h3::before { content: ''; display: inline-block; width: 6px; height: 6px; border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted); transform: rotate(-45deg); transition: transform 0.15s; }
+.config-panel.open h3::before { transform: rotate(45deg); }
+.config-panel .config-body { display: none; }
+.config-panel.open .config-body { display: block; }
+.config-row { margin-bottom: 10px; }
+.config-row label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 4px; }
+.config-row select, .config-row input { width: 100%; padding: 6px 8px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; font-size: 12px; font-family: var(--font); }
+.config-row input { font-family: var(--mono); }
+.main-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.stage-info { padding: 16px 20px; border-bottom: 1px solid var(--border); }
+.stage-info h2 { font-size: 16px; font-weight: 600; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
+.stage-info .num { font-size: 12px; color: var(--muted); background: var(--surface); padding: 2px 8px; border-radius: 10px; }
+.stage-info .desc { font-size: 13px; color: var(--muted); line-height: 1.5; margin-bottom: 10px; }
+.stats-row { display: flex; gap: 16px; flex-wrap: wrap; }
+.stat { background: var(--surface); padding: 8px 12px; border-radius: var(--radius); border: 1px solid var(--border); }
+.stat .val { font-size: 18px; font-weight: 700; font-family: var(--mono); }
+.stat .lbl { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin-top: 2px; }
+.changes-section { padding: 12px 20px; border-bottom: 1px solid var(--border); max-height: 240px; overflow-y: auto; }
+.changes-section h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); margin-bottom: 8px; }
+.change-item { font-size: 12px; padding: 6px 10px; border-radius: 4px; margin-bottom: 4px; font-family: var(--mono); line-height: 1.5; border-left: 3px solid transparent; background: var(--surface); }
+.change-item.removed { border-left-color: var(--red); }
+.change-item.modified { border-left-color: var(--amber); }
+.change-item.filled { border-left-color: var(--green); }
+.change-item.resolved { border-left-color: var(--cyan); }
+.change-item.collision { border-left-color: var(--pink); }
+.change-item .from { color: var(--red); text-decoration: line-through; opacity: 0.7; }
+.change-item .to { color: var(--green); }
+.change-item .tag { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 3px; font-weight: 600; margin-right: 4px; }
+.change-item .tag.rm { background: rgba(239,68,68,0.2); color: var(--red); }
+.change-item .tag.mod { background: rgba(245,158,11,0.2); color: var(--amber); }
+.change-item .tag.fill { background: rgba(34,197,94,0.2); color: var(--green); }
+.change-item .tag.res { background: rgba(6,182,212,0.2); color: var(--cyan); }
+.change-item .tag.col { background: rgba(236,72,153,0.2); color: var(--pink); }
+.data-table-wrapper { flex: 1; overflow: auto; padding: 0 20px 16px; }
+.data-table-controls { padding: 8px 0; display: flex; gap: 12px; align-items: center; position: sticky; top: 0; background: var(--bg); z-index: 1; }
+.data-table-controls label { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 4px; cursor: pointer; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; font-family: var(--mono); }
+th { text-align: left; padding: 6px 10px; background: var(--surface); color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; position: sticky; top: 32px; z-index: 1; border-bottom: 1px solid var(--border); }
+td { padding: 5px 10px; border-bottom: 1px solid var(--border); max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+tr.removed { background: rgba(239,68,68,0.08); }
+tr.removed td { color: var(--red); text-decoration: line-through; opacity: 0.6; }
+td.modified { background: rgba(245,158,11,0.12); }
+td.filled { background: rgba(34,197,94,0.12); }
+td.blank { color: var(--muted); font-style: italic; }
+.prompt-bar { border-top: 1px solid var(--border); padding: 12px 24px; display: flex; gap: 12px; align-items: flex-start; background: var(--surface); }
+.prompt-bar .prompt-text { flex: 1; font-size: 13px; line-height: 1.5; color: var(--text); min-height: 36px; max-height: 120px; overflow-y: auto; }
+.copy-btn { padding: 8px 16px; background: var(--accent); color: #fff; border: none; border-radius: var(--radius); cursor: pointer; font-family: var(--font); font-size: 13px; font-weight: 500; white-space: nowrap; transition: all 0.15s; }
+.copy-btn:hover { filter: brightness(1.1); }
+.copy-btn.copied { background: var(--green); }
+input[type="checkbox"] { accent-color: var(--accent); }
+.no-changes { font-size: 13px; color: var(--muted); padding: 8px 0; font-style: italic; }
+.color-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+.empty-state { padding: 40px 20px; text-align: center; color: var(--muted); font-size: 14px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Bronze Pipeline Playground</h1>
+  <span class="badge">Interactive</span>
+</div>
+
+<div class="toolbar">
+  <span class="label">Dataset</span>
+  <div id="preset-buttons"></div>
+  <div class="sep"></div>
+  <span class="label">Stages</span>
+  <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer">
+    <input type="checkbox" id="toggle-all" checked onchange="toggleAllStages(this.checked)"> All
+  </label>
+</div>
+
+<div class="input-editor" id="input-editor">
+  <textarea id="csv-input" spellcheck="false" oninput="onCustomInput()"></textarea>
+  <div class="hint">Edit CSV above. First row is the header. Changes apply instantly.</div>
+</div>
+
+<div class="content">
+  <div class="sidebar">
+    <div class="pipeline-flow">
+      <h3>Pipeline Stages</h3>
+      <div id="pipeline-flow"></div>
+    </div>
+    <div class="config-panel" id="config-panel">
+      <h3 onclick="document.getElementById('config-panel').classList.toggle('open')">Configuration</h3>
+      <div class="config-body">
+        <div class="config-row">
+          <label>Canonical Parent Strategy</label>
+          <select id="cfg-strategy" onchange="state.config.strategy=this.value;updateAll()">
+            <option value="first">Alphabetically First</option>
+            <option value="most_frequent">Most Frequent</option>
+          </select>
+        </div>
+        <div class="config-row">
+          <label>Modifier Tokens (comma-separated)</label>
+          <input id="cfg-modifiers" value="other, miscellaneous, misc, general, various" oninput="onModifiersChange(this.value)">
+        </div>
+        <div class="config-row">
+          <label>Financial Acronyms (comma-separated)</label>
+          <input id="cfg-acronyms" value="IT, KKR, TPA, ISDA, OTC, AML, KYC, FX, ETF, NAV" oninput="onAcronymsChange(this.value)">
+        </div>
+        <div class="config-row">
+          <label>Acronym Min Length</label>
+          <input type="number" id="cfg-acr-len" value="2" min="1" max="10" style="width:60px" oninput="state.config.acronymMinLength=+this.value;updateAll()">
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="main-panel">
+    <div class="stage-info" id="stage-info"></div>
+    <div class="changes-section" id="changes-section"></div>
+    <div class="data-table-wrapper">
+      <div class="data-table-controls">
+        <label><input type="checkbox" id="show-clean" onchange="renderStageDetail()"> Show _clean columns</label>
+        <label><input type="checkbox" id="show-merge" onchange="renderStageDetail()"> Show merge key</label>
+      </div>
+      <div id="data-table"></div>
+    </div>
+  </div>
+</div>
+
+<div class="prompt-bar">
+  <div class="prompt-text" id="prompt-output"></div>
+  <button class="copy-btn" id="copy-btn" onclick="copyPrompt()">Copy Prompt</button>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════
+// SAFE DOM HELPERS — all dynamic content uses textContent
+// or is escaped through createTextNode before insertion.
+// ═══════════════════════════════════════════════════
+function esc(s) {
+  if (s == null) return '(null)';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function setText(el, text) {
+  if (typeof el === 'string') el = document.getElementById(el);
+  el.textContent = text;
+}
+
+function setDom(parentId, buildFn) {
+  const parent = document.getElementById(parentId);
+  parent.replaceChildren();
+  buildFn(parent);
+}
+
+function el(tag, attrs, children) {
+  const e = document.createElement(tag);
+  if (attrs) for (const [k, v] of Object.entries(attrs)) {
+    if (k === 'class') e.className = v;
+    else if (k === 'style') e.style.cssText = v;
+    else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+    else e.setAttribute(k, v);
+  }
+  if (children) {
+    if (typeof children === 'string') e.textContent = children;
+    else if (Array.isArray(children)) children.forEach(c => { if (c) e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
+    else e.appendChild(typeof children === 'string' ? document.createTextNode(children) : children);
+  }
+  return e;
+}
+
+// ═══════════════════════════════════════════════════
+// SAMPLE DATASETS
+// ═══════════════════════════════════════════════════
+const PRESETS = [
+  {
+    name: 'Vendor Hierarchies',
+    desc: '21 rows: dupes, acronyms, blanks, modifiers, multi-parent, collision guard',
+    data: [
+      ['Corporate Services & Real Estate', 'Food & Catering'],
+      ['corporate services & real estate', 'food & catering'],
+      ['Corporate Services & Real Estate', 'Travel & Expenses'],
+      ['Corporate Services & Real Estate', 'Facilities Management'],
+      ['Corporate Services & Real Estate', ''],
+      ['Professional Services', 'Food & Catering'],
+      ['Professional Services', 'Legal & Compliance'],
+      ['Professional Services', 'Consulting'],
+      ['Professional Services', ''],
+      ['Technology', 'IT Infrastructure'],
+      ['Technology', 'IT Infrastructure Other'],
+      ['Technology', 'Software Development'],
+      ['Technology', ''],
+      ['KKR Entity Related Parties', 'Fund Administration'],
+      ['Finance', 'Budget & Planning'],
+      ['Finance', 'Accounting Miscellaneous'],
+      ['Finance', 'Treasury Management'],
+      ['Finance', ''],
+      ['Compliance & Risk', 'Compliance'],
+      ['Compliance & Risk', ''],
+      ['Professional Services', 'Budget & Planning'],
+    ],
+  },
+  {
+    name: 'Clean Data',
+    desc: '10 rows: no issues, pipeline passes through cleanly',
+    data: [
+      ['Products', 'Electronics'],
+      ['Products', 'Clothing'],
+      ['Products', 'Food Items'],
+      ['Services', 'Consulting'],
+      ['Services', 'Maintenance'],
+      ['Services', 'Training'],
+      ['Operations', 'Logistics'],
+      ['Operations', 'Quality Control'],
+      ['Marketing', 'Digital'],
+      ['Marketing', 'Print'],
+    ],
+  },
+  {
+    name: 'Maximum Chaos',
+    desc: '15 rows: many dupes, blanks, modifiers, multi-parent conflicts',
+    data: [
+      ['Human Resources', 'Payroll'],
+      ['HUMAN RESOURCES', 'Payroll'],
+      ['human resources', 'payroll'],
+      ['Human Resources', ''],
+      ['Human Resources', 'Benefits Other'],
+      ['Finance', 'Payroll'],
+      ['Finance', 'Accounting'],
+      ['finance', 'accounting'],
+      ['IT Department', 'Software General'],
+      ['IT Department', ''],
+      ['IT Department', 'Hardware Miscellaneous'],
+      ['Operations', 'Software General'],
+      ['Operations', 'Logistics'],
+      ['Operations', ''],
+      ['Legal', 'Compliance Various'],
+    ],
+  },
+];
+
+// ═══════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════
+const state = {
+  presetIndex: 0,
+  customData: null,
+  stages: {
+    canonicalDedup: true,
+    variantAttribution: true,
+    fillBlankL2: true,
+    removeModifiers: true,
+    bronzeFinalize: true,
+  },
+  config: {
+    strategy: 'first',
+    modifierTokens: ['other', 'miscellaneous', 'misc', 'general', 'various'],
+    acronyms: new Set(['IT','KKR','TPA','ISDA','OTC','AML','KYC','FX','ETF','NAV']),
+    acronymMinLength: 2,
+  },
+  selectedStage: 0,
+  results: [],
+};
+
+// ═══════════════════════════════════════════════════
+// PIPELINE LOGIC
+// ═══════════════════════════════════════════════════
+const NULL_SENTINELS = new Set(['NULL', 'NaN', 'nan', '', 'None', 'null']);
+
+function normalize(s) {
+  if (s == null || NULL_SENTINELS.has(s)) return '';
+  return s.trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function mkKey(l1, l2) {
+  return normalize(l1) + '<>' + normalize(l2);
+}
+
+function acronymAwareTitle(s, minLen, allowlist) {
+  if (!s) return s;
+  return s.split(' ').map(tok => {
+    if (allowlist.has(tok.toUpperCase())) return tok.toUpperCase();
+    if (tok === tok.toUpperCase() && tok.length >= minLen) return tok;
+    return tok.charAt(0).toUpperCase() + tok.slice(1).toLowerCase();
+  }).join(' ');
+}
+
+function stripModifier(value, modTokens) {
+  if (!value) return [value, null];
+  const tokens = value.split(' ');
+  for (let i = 0; i < tokens.length; i++) {
+    if (modTokens.has(tokens[i].toLowerCase())) {
+      const remaining = [...tokens.slice(0, i), ...tokens.slice(i + 1)].join(' ').trim();
+      return [remaining, tokens[i].toLowerCase()];
+    }
+  }
+  return [value, null];
+}
+
+function deepCloneRows(rows) { return rows.map(r => ({...r})); }
+
+// --- Stage 0: ReadAndClean ---
+function stageReadAndClean(inputData) {
+  const rows = inputData.map((pair, i) => {
+    const l1 = NULL_SENTINELS.has(pair[0]) ? null : pair[0];
+    const l2 = NULL_SENTINELS.has(pair[1]) ? null : pair[1];
+    return { _idx: i, LEVEL_ONE: l1, LEVEL_TWO: l2 };
+  });
+  return {
+    name: 'ReadAndClean', enabled: true, color: 'var(--blue)',
+    desc: 'Read CSV, normalize NULL sentinels to None. BOM handling (utf-8-sig).',
+    inputRows: rows, outputRows: deepCloneRows(rows),
+    changes: [], stats: { rows: rows.length, nullL2: rows.filter(r => r.LEVEL_TWO == null).length },
+  };
+}
+
+// --- Stage 1: CanonicalDedup ---
+function stageCanonicalDedup(inputRows) {
+  const rows = deepCloneRows(inputRows);
+  const seen = new Map();
+  const surviving = [], removed = [], changes = [];
+
+  for (const row of rows) {
+    const mk = mkKey(row.LEVEL_ONE, row.LEVEL_TWO);
+    const l1c = normalize(row.LEVEL_ONE);
+    const l2c = normalize(row.LEVEL_TWO);
+    if (seen.has(mk)) {
+      removed.push(row);
+      changes.push({
+        type: 'removed', cls: 'removed', tag: 'DUPE', tagCls: 'rm',
+        text: (row.LEVEL_ONE || '(blank)') + ', ' + (row.LEVEL_TWO || '(blank)') + ' — duplicate of row ' + (seen.get(mk) + 1),
+        fromText: (row.LEVEL_ONE || '(blank)') + ', ' + (row.LEVEL_TWO || '(blank)'),
+        detail: 'duplicate of row ' + (seen.get(mk) + 1),
+      });
+      continue;
+    }
+    seen.set(mk, surviving.length);
+    row.LEVEL_ONE_clean = l1c;
+    row.LEVEL_TWO_clean = l2c;
+    row._mergeKey = mk;
+    surviving.push(row);
+  }
+  return {
+    name: 'CanonicalDedup', enabled: state.stages.canonicalDedup, color: 'var(--red)',
+    desc: 'Case/whitespace-insensitive dedup. Normalizes to merge key, keeps first occurrence. DESTRUCTIVE.',
+    inputRows: rows, outputRows: surviving, removedRows: removed, changes,
+    stats: { dupes: removed.length, surviving: surviving.length },
+  };
+}
+
+// --- Stage 2: VariantAttribution ---
+function stageVariantAttribution(inputRows) {
+  const rows = deepCloneRows(inputRows);
+  const changes = [];
+  let acronymsPreserved = 0;
+
+  for (const row of rows) {
+    const oldL1 = row.LEVEL_ONE_clean;
+    const oldL2 = row.LEVEL_TWO_clean;
+    row.LEVEL_ONE_clean = acronymAwareTitle(oldL1, state.config.acronymMinLength, state.config.acronyms);
+    row.LEVEL_TWO_clean = acronymAwareTitle(oldL2, state.config.acronymMinLength, state.config.acronyms);
+    row._mergeKey = row.LEVEL_ONE_clean.toLowerCase() + '<>' + row.LEVEL_TWO_clean.toLowerCase();
+
+    const naiveL1 = oldL1 ? oldL1.split(' ').map(t => t.charAt(0).toUpperCase() + t.slice(1)).join(' ') : '';
+    const naiveL2 = oldL2 ? oldL2.split(' ').map(t => t.charAt(0).toUpperCase() + t.slice(1)).join(' ') : '';
+    if (row.LEVEL_ONE_clean !== naiveL1 || row.LEVEL_TWO_clean !== naiveL2) {
+      acronymsPreserved++;
+    }
+
+    if (row.LEVEL_ONE_clean !== oldL1 || row.LEVEL_TWO_clean !== oldL2) {
+      const parts = [];
+      if (row.LEVEL_ONE_clean !== oldL1) parts.push('L1: ' + oldL1 + ' -> ' + row.LEVEL_ONE_clean);
+      if (row.LEVEL_TWO_clean !== oldL2) parts.push('L2: ' + oldL2 + ' -> ' + row.LEVEL_TWO_clean);
+      changes.push({ type: 'modified', cls: 'modified', tag: 'TITLE', tagCls: 'mod',
+        text: parts.join(' | '), transitions: [
+          ...(row.LEVEL_ONE_clean !== oldL1 ? [{label: 'L1', from: oldL1, to: row.LEVEL_ONE_clean}] : []),
+          ...(row.LEVEL_TWO_clean !== oldL2 ? [{label: 'L2', from: oldL2, to: row.LEVEL_TWO_clean}] : []),
+        ],
+      });
+    }
+  }
+  return {
+    name: 'VariantAttribution', enabled: state.stages.variantAttribution, color: 'var(--purple)',
+    desc: 'Acronym-aware Title Case. Preserves financial acronyms (KKR, IT, FX) while title-casing everything else.',
+    inputRows: deepCloneRows(inputRows), outputRows: rows, changes,
+    stats: { titleCased: changes.length, acronymsPreserved },
+  };
+}
+
+// --- Stage 3: FillBlankLevelTwo ---
+function stageFillBlankL2(inputRows) {
+  const rows = deepCloneRows(inputRows);
+  const changes = [];
+  for (const row of rows) {
+    if (!row.LEVEL_TWO_clean || row.LEVEL_TWO_clean.trim() === '') {
+      row._l2WasBlank = true;
+      row.LEVEL_TWO_clean = row.LEVEL_ONE_clean;
+      row._mergeKey = row.LEVEL_ONE_clean.toLowerCase() + '<>' + row.LEVEL_TWO_clean.toLowerCase();
+      changes.push({
+        type: 'filled', cls: 'filled', tag: 'FILL', tagCls: 'fill',
+        text: 'L1=' + row.LEVEL_ONE_clean + ' -> L2 set to ' + row.LEVEL_TWO_clean + ' (self-referential)',
+        l1: row.LEVEL_ONE_clean, l2: row.LEVEL_TWO_clean,
+      });
+    }
+  }
+  return {
+    name: 'FillBlankLevelTwo', enabled: state.stages.fillBlankL2, color: 'var(--green)',
+    desc: 'When L2 is blank, copy L1 into L2. Creates self-referential entries (a category becomes its own leaf).',
+    inputRows: deepCloneRows(inputRows), outputRows: rows, changes,
+    stats: { filled: changes.length },
+  };
+}
+
+// --- Stage 4: RemoveModifiers ---
+function stageRemoveModifiers(inputRows) {
+  const rows = deepCloneRows(inputRows);
+  const changes = [];
+  const modTokens = new Set(state.config.modifierTokens);
+  let collisionsPrevented = 0, emptyPrevented = 0, stripped = 0;
+
+  const existingKeys = new Map();
+  rows.forEach((r, i) => { if (!existingKeys.has(r._mergeKey)) existingKeys.set(r._mergeKey, i); });
+
+  for (const row of rows) {
+    for (const [field, otherField] of [['LEVEL_ONE_clean', 'LEVEL_TWO_clean'], ['LEVEL_TWO_clean', 'LEVEL_ONE_clean']]) {
+      const [strippedVal, removedToken] = stripModifier(row[field], modTokens);
+      if (removedToken == null) continue;
+      if (!strippedVal.trim()) { emptyPrevented++; continue; }
+
+      const candidateL1 = field === 'LEVEL_ONE_clean' ? strippedVal : row.LEVEL_ONE_clean;
+      const candidateL2 = field === 'LEVEL_TWO_clean' ? strippedVal : row.LEVEL_TWO_clean;
+      const candidateKey = candidateL1.toLowerCase() + '<>' + candidateL2.toLowerCase();
+
+      const existingIdx = existingKeys.get(candidateKey);
+      if (existingIdx !== undefined && existingKeys.get(row._mergeKey) !== existingIdx) {
+        collisionsPrevented++;
+        changes.push({
+          type: 'collision', cls: 'collision', tag: 'BLOCK', tagCls: 'col',
+          text: '"' + removedToken + '" in "' + row[field] + '" would collide with "' + candidateL1 + ', ' + candidateL2 + '"',
+          token: removedToken, original: row[field], wouldBe: candidateL1 + ', ' + candidateL2,
+        });
+        continue;
+      }
+
+      const oldVal = row[field];
+      row[field] = strippedVal;
+      row._mergeKey = row.LEVEL_ONE_clean.toLowerCase() + '<>' + row.LEVEL_TWO_clean.toLowerCase();
+      row._modifierRemoved = removedToken;
+      row._modifierField = field;
+      stripped++;
+      changes.push({
+        type: 'modified', cls: 'modified', tag: 'STRIP', tagCls: 'mod',
+        text: 'Stripped "' + removedToken + '" from ' + (field.includes('ONE') ? 'L1' : 'L2') + ': ' + oldVal + ' -> ' + strippedVal,
+        token: removedToken, from: oldVal, to: strippedVal, fieldLabel: field.includes('ONE') ? 'L1' : 'L2',
+      });
+      break;
+    }
+  }
+  return {
+    name: 'RemoveModifiers', enabled: state.stages.removeModifiers, color: 'var(--amber)',
+    desc: 'Strip noise tokens (Other, Misc, General). Empty guard prevents stripping to blank. Collision guard prevents merge conflicts.',
+    inputRows: deepCloneRows(inputRows), outputRows: rows, changes,
+    stats: { stripped, collisionsPrevented, emptyPrevented },
+  };
+}
+
+// --- Stage 5: BronzeFinalize ---
+function stageBronzeFinalize(inputRows) {
+  const rows = deepCloneRows(inputRows);
+  const changes = [];
+
+  const l2Parents = new Map();
+  rows.forEach((row, i) => {
+    const l2 = row.LEVEL_TWO_clean || '';
+    const l1 = row.LEVEL_ONE_clean || '';
+    if (!l2 || !l1) return;
+    if (!l2Parents.has(l2)) l2Parents.set(l2, new Map());
+    const parentMap = l2Parents.get(l2);
+    if (!parentMap.has(l1)) parentMap.set(l1, []);
+    parentMap.get(l1).push(i);
+  });
+
+  const indicesToRemove = new Set();
+  const resolutions = [];
+
+  for (const [l2, parentMap] of l2Parents) {
+    if (parentMap.size <= 1) continue;
+    const allL1 = [...parentMap.keys()].sort();
+    let canonicalL1;
+    if (state.config.strategy === 'most_frequent') {
+      const maxCount = Math.max(...[...parentMap.values()].map(v => v.length));
+      const candidates = [...parentMap.entries()].filter(([,v]) => v.length === maxCount).map(([k]) => k).sort();
+      canonicalL1 = candidates[0];
+    } else {
+      canonicalL1 = allL1[0];
+    }
+    const dropped = allL1.filter(l1 => l1 !== canonicalL1);
+    for (const l1 of dropped) { for (const idx of parentMap.get(l1)) indicesToRemove.add(idx); }
+    resolutions.push({ l2, canonicalL1, allL1, dropped });
+    changes.push({
+      type: 'resolved', cls: 'resolved', tag: 'RESOLVE', tagCls: 'res',
+      text: '"' + l2 + '" -> keep ' + canonicalL1 + ', drop ' + dropped.join(', '),
+      l2, keep: canonicalL1, drop: dropped,
+    });
+  }
+
+  const removedRows = [], surviving = [];
+  rows.forEach((row, i) => {
+    if (indicesToRemove.has(i)) {
+      removedRows.push(row);
+    } else {
+      row.LEVEL_ONE_original = row.LEVEL_ONE;
+      row.LEVEL_TWO_original = row.LEVEL_TWO;
+      row.LEVEL_ONE = row.LEVEL_ONE_clean;
+      row.LEVEL_TWO = row.LEVEL_TWO_clean;
+      surviving.push(row);
+    }
+  });
+
+  return {
+    name: 'BronzeFinalize', enabled: state.stages.bronzeFinalize, color: 'var(--cyan)',
+    desc: 'Resolve multi-parent L2 values (pick canonical parent, remove non-canonical rows). Promote _clean values into original column keys.',
+    inputRows: deepCloneRows(inputRows), outputRows: surviving, removedRows, changes,
+    stats: { multiParent: resolutions.length, rowsRemoved: indicesToRemove.size },
+  };
+}
+
+// --- Run full pipeline ---
+function runPipeline() {
+  const preset = state.customData || PRESETS[state.presetIndex].data;
+  const results = [];
+  const s0 = stageReadAndClean(preset);
+  results.push(s0);
+  let rows = s0.outputRows;
+
+  function ensureCleanCols(r) {
+    r = deepCloneRows(r);
+    r.forEach(row => {
+      if (row.LEVEL_ONE_clean === undefined) row.LEVEL_ONE_clean = normalize(row.LEVEL_ONE);
+      if (row.LEVEL_TWO_clean === undefined) row.LEVEL_TWO_clean = normalize(row.LEVEL_TWO);
+      if (!row._mergeKey) row._mergeKey = mkKey(row.LEVEL_ONE, row.LEVEL_TWO);
+    });
+    return r;
+  }
+
+  if (state.stages.canonicalDedup) {
+    const s = stageCanonicalDedup(rows); results.push(s); rows = s.outputRows;
+  }
+  if (state.stages.variantAttribution) {
+    if (!rows[0] || rows[0].LEVEL_ONE_clean === undefined) rows = ensureCleanCols(rows);
+    const s = stageVariantAttribution(rows); results.push(s); rows = s.outputRows;
+  }
+  if (state.stages.fillBlankL2) {
+    if (!rows[0] || rows[0].LEVEL_ONE_clean === undefined) rows = ensureCleanCols(rows);
+    const s = stageFillBlankL2(rows); results.push(s); rows = s.outputRows;
+  }
+  if (state.stages.removeModifiers) {
+    if (!rows[0] || rows[0].LEVEL_ONE_clean === undefined) rows = ensureCleanCols(rows);
+    const s = stageRemoveModifiers(rows); results.push(s); rows = s.outputRows;
+  }
+  if (state.stages.bronzeFinalize) {
+    if (!rows[0] || rows[0].LEVEL_ONE_clean === undefined) rows = ensureCleanCols(rows);
+    const s = stageBronzeFinalize(rows); results.push(s); rows = s.outputRows;
+  }
+
+  state.results = results;
+  if (state.selectedStage >= results.length) state.selectedStage = results.length - 1;
+}
+
+// ═══════════════════════════════════════════════════
+// RENDERING — uses safe DOM construction
+// ═══════════════════════════════════════════════════
+function renderPresets() {
+  setDom('preset-buttons', parent => {
+    PRESETS.forEach((p, i) => {
+      const btn = el('button', {
+        class: 'preset-btn' + (i === state.presetIndex && !state.customData ? ' active' : ''),
+        title: p.desc, onclick: () => selectPreset(i),
+      }, p.name);
+      parent.appendChild(btn);
+    });
+    parent.appendChild(el('button', {
+      class: 'preset-btn' + (state.customData ? ' active' : ''),
+      onclick: selectCustom,
+    }, 'Custom'));
+  });
+}
+
+function renderPipelineFlow() {
+  const stagesDef = [
+    { key: null, name: 'ReadAndClean', color: 'var(--blue)', alwaysOn: true },
+    { key: 'canonicalDedup', name: 'CanonicalDedup', color: 'var(--red)' },
+    { key: 'variantAttribution', name: 'VariantAttribution', color: 'var(--purple)' },
+    { key: 'fillBlankL2', name: 'FillBlankLevelTwo', color: 'var(--green)' },
+    { key: 'removeModifiers', name: 'RemoveModifiers', color: 'var(--amber)' },
+    { key: 'bronzeFinalize', name: 'BronzeFinalize', color: 'var(--cyan)' },
+  ];
+
+  setDom('pipeline-flow', parent => {
+    let resultIdx = 0;
+    stagesDef.forEach((sd, i) => {
+      const enabled = sd.alwaysOn || state.stages[sd.key];
+      const result = enabled ? state.results[resultIdx] : null;
+      const isSel = resultIdx === state.selectedStage && enabled;
+      const ridx = resultIdx;
+
+      if (i > 0) {
+        const conn = el('div', {class: 'stage-connector'});
+        conn.appendChild(el('div', {class: 'arrow'}));
+        parent.appendChild(conn);
+      }
+
+      const card = el('div', {
+        class: 'stage-card' + (isSel ? ' selected' : '') + (!enabled ? ' disabled' : ''),
+        style: 'border-left-color:' + sd.color,
+      });
+      if (enabled) card.addEventListener('click', () => selectStage(ridx));
+
+      const nameRow = el('div', {class: 'name'});
+      const dot = el('span', {class: 'color-dot', style: 'background:' + sd.color});
+      nameRow.appendChild(dot);
+      nameRow.appendChild(document.createTextNode(sd.name));
+      card.appendChild(nameRow);
+
+      const countRow = el('div', {class: 'row-count'});
+      if (enabled && result) {
+        const rowsIn = (result.inputRows || result.outputRows).length;
+        const rowsOut = result.outputRows.length;
+        const delta = rowsOut - rowsIn;
+        const deltaClass = delta < 0 ? 'neg' : delta > 0 ? 'pos' : 'zero';
+        const deltaStr = delta === 0 ? '(no change)' : (delta > 0 ? '+' + delta : String(delta));
+        countRow.appendChild(document.createTextNode(rowsIn + ' \u2192 ' + rowsOut + ' '));
+        const deltaSpan = el('span', {class: 'delta ' + deltaClass}, deltaStr);
+        countRow.appendChild(deltaSpan);
+      } else {
+        countRow.textContent = 'disabled';
+      }
+      card.appendChild(countRow);
+
+      if (!sd.alwaysOn) {
+        const toggleDiv = el('div', {class: 'toggle'});
+        const cb = el('input', {type: 'checkbox'});
+        cb.checked = enabled;
+        cb.addEventListener('click', e => { e.stopPropagation(); toggleStage(sd.key, cb.checked); });
+        toggleDiv.appendChild(cb);
+        card.appendChild(toggleDiv);
+      }
+
+      parent.appendChild(card);
+      if (enabled) resultIdx++;
+    });
+  });
+}
+
+function renderStageDetail() {
+  const result = state.results[state.selectedStage];
+  if (!result) return;
+
+  // Stage info
+  setDom('stage-info', parent => {
+    const h2 = el('h2');
+    h2.appendChild(el('span', {class: 'num'}, 'Stage ' + state.selectedStage));
+    h2.appendChild(document.createTextNode(' ' + result.name));
+    parent.appendChild(h2);
+    parent.appendChild(el('div', {class: 'desc'}, result.desc));
+
+    const statsRow = el('div', {class: 'stats-row'});
+    Object.entries(result.stats).filter(([k, v]) => typeof v !== 'object').forEach(([k, v]) => {
+      const stat = el('div', {class: 'stat'});
+      stat.appendChild(el('div', {class: 'val'}, String(v)));
+      stat.appendChild(el('div', {class: 'lbl'}, k.replace(/([A-Z])/g, ' $1').trim()));
+      statsRow.appendChild(stat);
+    });
+    parent.appendChild(statsRow);
+  });
+
+  // Changes
+  setDom('changes-section', parent => {
+    const count = result.changes ? result.changes.length : 0;
+    parent.appendChild(el('h3', null, 'Changes (' + count + ')'));
+
+    if (count === 0) {
+      parent.appendChild(el('div', {class: 'no-changes'}, 'No changes at this stage.'));
+      return;
+    }
+
+    result.changes.forEach(c => {
+      const item = el('div', {class: 'change-item ' + c.cls});
+      item.appendChild(el('span', {class: 'tag ' + c.tagCls}, c.tag));
+      item.appendChild(document.createTextNode(' '));
+
+      // Build change description safely based on change type
+      if (c.transitions) {
+        // VariantAttribution transitions
+        c.transitions.forEach((t, ti) => {
+          if (ti > 0) item.appendChild(document.createTextNode(' | '));
+          item.appendChild(document.createTextNode(t.label + ': '));
+          item.appendChild(el('span', {class: 'from'}, t.from));
+          item.appendChild(document.createTextNode(' \u2192 '));
+          item.appendChild(el('span', {class: 'to'}, t.to));
+        });
+      } else if (c.from !== undefined && c.to !== undefined) {
+        // RemoveModifiers strip
+        item.appendChild(document.createTextNode('Stripped "' + c.token + '" from ' + c.fieldLabel + ': '));
+        item.appendChild(el('span', {class: 'from'}, c.from));
+        item.appendChild(document.createTextNode(' \u2192 '));
+        item.appendChild(el('span', {class: 'to'}, c.to));
+      } else if (c.keep && c.drop) {
+        // BronzeFinalize resolution
+        item.appendChild(el('b', null, '"' + c.l2 + '"'));
+        item.appendChild(document.createTextNode(' \u2192 keep '));
+        item.appendChild(el('span', {class: 'to'}, c.keep));
+        item.appendChild(document.createTextNode(', drop '));
+        item.appendChild(el('span', {class: 'from'}, c.drop.join(', ')));
+      } else if (c.l1 && c.l2) {
+        // FillBlankL2
+        item.appendChild(document.createTextNode('L1='));
+        item.appendChild(el('b', null, c.l1));
+        item.appendChild(document.createTextNode(' \u2192 L2 set to '));
+        item.appendChild(el('span', {class: 'to'}, c.l2));
+        item.appendChild(document.createTextNode(' (self-referential)'));
+      } else if (c.wouldBe) {
+        // Collision
+        item.appendChild(document.createTextNode('"' + c.token + '" in "' + c.original + '" would collide with "'));
+        item.appendChild(el('b', null, c.wouldBe));
+        item.appendChild(document.createTextNode('"'));
+      } else if (c.fromText) {
+        // Dedup removed
+        item.appendChild(el('span', {class: 'from'}, c.fromText));
+        item.appendChild(document.createTextNode(' \u2014 ' + c.detail));
+      } else {
+        item.appendChild(document.createTextNode(c.text));
+      }
+
+      parent.appendChild(item);
+    });
+  });
+
+  // Data table
+  const showClean = document.getElementById('show-clean').checked;
+  const showMerge = document.getElementById('show-merge').checked;
+  const rows = result.outputRows;
+
+  setDom('data-table', parent => {
+    if (rows.length === 0) {
+      parent.appendChild(el('div', {class: 'empty-state'}, 'No rows at this stage.'));
+      return;
+    }
+
+    const cols = ['#', 'LEVEL_ONE', 'LEVEL_TWO'];
+    if (showClean && rows[0] && rows[0].LEVEL_ONE_clean !== undefined) cols.push('LEVEL_ONE_clean', 'LEVEL_TWO_clean');
+    if (showMerge && rows[0] && rows[0]._mergeKey !== undefined) cols.push('_mergeKey');
+
+    const table = el('table');
+    const thead = el('thead');
+    const headRow = el('tr');
+    cols.forEach(c => headRow.appendChild(el('th', null, c)));
+    thead.appendChild(headRow);
+    table.appendChild(thead);
+
+    const tbody = el('tbody');
+
+    // Surviving rows
+    rows.forEach((row, i) => {
+      const tr = el('tr');
+      cols.forEach(col => {
+        if (col === '#') { tr.appendChild(el('td', {style: 'color:var(--muted)'}, String(i + 1))); return; }
+        let val = row[col];
+        let cls = '';
+        if (val == null || val === '') { val = '(blank)'; cls = 'blank'; }
+        if (col === 'LEVEL_TWO_clean' && row._l2WasBlank) cls = 'filled';
+        if (col.includes('clean') && row._modifierRemoved) {
+          const isTargetField = (col.includes('ONE') && row._modifierField === 'LEVEL_ONE_clean') ||
+                                (col.includes('TWO') && row._modifierField === 'LEVEL_TWO_clean');
+          if (isTargetField) cls = 'modified';
+        }
+        tr.appendChild(el('td', {class: cls, title: String(val)}, String(val)));
+      });
+      tbody.appendChild(tr);
+    });
+
+    // Removed rows
+    if (result.removedRows && result.removedRows.length > 0) {
+      result.removedRows.forEach(row => {
+        const tr = el('tr', {class: 'removed'});
+        cols.forEach(col => {
+          if (col === '#') { tr.appendChild(el('td', null, '\u2212')); return; }
+          let val = row[col];
+          if (val == null || val === '') val = '(blank)';
+          tr.appendChild(el('td', {title: String(val)}, String(val)));
+        });
+        tbody.appendChild(tr);
+      });
+    }
+
+    table.appendChild(tbody);
+    parent.appendChild(table);
+  });
+}
+
+function renderPrompt() {
+  const results = state.results;
+  if (!results.length) { setText('prompt-output', 'Run the pipeline to generate a prompt.'); return; }
+
+  const parts = [];
+  const input = results[0];
+  const output = results[results.length - 1];
+  const enabledStages = results.slice(1).map(r => r.name);
+
+  parts.push('Bronze pipeline processed ' + input.outputRows.length + ' input rows through ' + enabledStages.length + ' stage' + (enabledStages.length !== 1 ? 's' : '') + ' (' + enabledStages.join(' \u2192 ') + ').');
+
+  for (const r of results.slice(1)) {
+    if (r.name === 'CanonicalDedup' && r.stats.dupes > 0)
+      parts.push('CanonicalDedup removed ' + r.stats.dupes + ' duplicate row' + (r.stats.dupes !== 1 ? 's' : '') + '.');
+    if (r.name === 'VariantAttribution' && r.stats.titleCased > 0)
+      parts.push('VariantAttribution title-cased ' + r.stats.titleCased + ' value' + (r.stats.titleCased !== 1 ? 's' : '') + (r.stats.acronymsPreserved ? ', preserving ' + r.stats.acronymsPreserved + ' acronym' + (r.stats.acronymsPreserved !== 1 ? 's' : '') : '') + '.');
+    if (r.name === 'FillBlankLevelTwo' && r.stats.filled > 0)
+      parts.push('FillBlankLevelTwo filled ' + r.stats.filled + ' blank L2 value' + (r.stats.filled !== 1 ? 's' : '') + ' from L1 (self-referential entries).');
+    if (r.name === 'RemoveModifiers') {
+      const p = [];
+      if (r.stats.stripped > 0) p.push('stripped ' + r.stats.stripped + ' modifier' + (r.stats.stripped !== 1 ? 's' : ''));
+      if (r.stats.collisionsPrevented > 0) p.push(r.stats.collisionsPrevented + ' collision' + (r.stats.collisionsPrevented !== 1 ? 's' : '') + ' prevented');
+      if (r.stats.emptyPrevented > 0) p.push(r.stats.emptyPrevented + ' empty result' + (r.stats.emptyPrevented !== 1 ? 's' : '') + ' prevented');
+      if (p.length) parts.push('RemoveModifiers: ' + p.join(', ') + '.');
+    }
+    if (r.name === 'BronzeFinalize' && r.stats.multiParent > 0)
+      parts.push('BronzeFinalize resolved ' + r.stats.multiParent + ' multi-parent L2 value' + (r.stats.multiParent !== 1 ? 's' : '') + ', removing ' + r.stats.rowsRemoved + ' non-canonical row' + (r.stats.rowsRemoved !== 1 ? 's' : '') + ' (strategy: ' + (state.config.strategy === 'first' ? 'alphabetically first' : 'most frequent') + ').');
+  }
+
+  parts.push('Final output: ' + output.outputRows.length + ' rows, ready for parse pipeline.');
+  setText('prompt-output', parts.join(' '));
+}
+
+function updateAll() {
+  runPipeline();
+  renderPresets();
+  renderPipelineFlow();
+  renderStageDetail();
+  renderPrompt();
+}
+
+// ═══════════════════════════════════════════════════
+// EVENT HANDLERS
+// ═══════════════════════════════════════════════════
+function selectPreset(i) {
+  state.presetIndex = i;
+  state.customData = null;
+  state.selectedStage = 0;
+  document.getElementById('input-editor').classList.remove('show');
+  updateAll();
+}
+
+function selectCustom() {
+  document.getElementById('input-editor').classList.add('show');
+  const ta = document.getElementById('csv-input');
+  if (!ta.value) {
+    const preset = PRESETS[state.presetIndex].data;
+    ta.value = 'LEVEL_ONE,LEVEL_TWO\n' + preset.map(r => r.join(',')).join('\n');
+  }
+  onCustomInput();
+}
+
+function onCustomInput() {
+  const ta = document.getElementById('csv-input');
+  const lines = ta.value.trim().split('\n').filter(l => l.trim());
+  if (lines.length < 2) return;
+  const data = lines.slice(1).map(line => {
+    const parts = line.split(',').map(s => s.trim());
+    return [parts[0] || '', parts[1] || ''];
+  });
+  state.customData = data;
+  state.selectedStage = 0;
+  updateAll();
+}
+
+function selectStage(idx) {
+  state.selectedStage = idx;
+  renderPipelineFlow();
+  renderStageDetail();
+}
+
+function toggleStage(key, enabled) {
+  state.stages[key] = enabled;
+  document.getElementById('toggle-all').checked = Object.values(state.stages).every(v => v);
+  updateAll();
+}
+
+function toggleAllStages(enabled) {
+  for (const k in state.stages) state.stages[k] = enabled;
+  updateAll();
+}
+
+function onModifiersChange(val) {
+  state.config.modifierTokens = val.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+  updateAll();
+}
+
+function onAcronymsChange(val) {
+  state.config.acronyms = new Set(val.split(',').map(s => s.trim()).filter(Boolean));
+  updateAll();
+}
+
+function copyPrompt() {
+  const text = document.getElementById('prompt-output').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById('copy-btn');
+    btn.textContent = 'Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copy Prompt'; btn.classList.remove('copied'); }, 1500);
+  });
+}
+
+// ═══════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════
+document.getElementById('config-panel').classList.add('open');
+updateAll();
+</script>
+</body>
+</html>
