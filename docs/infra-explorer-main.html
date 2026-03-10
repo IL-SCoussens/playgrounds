@@ -749,17 +749,17 @@ var nodes = [
   { id: 'env_production', label: 'Production', path: 'infra/terraform/environments/production/', layer: 'environments', x: 880, y: 360, badge: 'Env', badgeColor: '#3fb950', desc: 'Full stack HA: 2+ DocDB nodes, CeleryExecutor + Redis, t3.large, deletion protection.', details: ['2+ DocDB nodes','Airflow CeleryExecutor + Redis','t3.large EC2','Deletion protection on'], tags: ['production','high_availability'] },
   { id: 'env_client', label: 'Client', path: 'infra/terraform/environments/client/', layer: 'environments', x: 1220, y: 360, badge: 'Env', badgeColor: '#3fb950', desc: 'Self-contained for dedicated-instance clients. No OIDC/CI role. Cross-account ECR pull.', details: ['enable_ci_role = false','Cross-account ECR pull','Self-contained (no shared env)','Packaged into release zip'], tags: ['client','dedicated_instance'] },
 
-  { id: 'phase_preflight', label: '0: Preflight', path: 'scripts/il-install.sh#phase0', layer: 'installer', x: 80, y: 620, badge: 'Phase', badgeColor: '#d2a8ff', desc: 'Validates tools (AWS CLI v2+, Terraform, jq, curl) and AWS auth.', details: ['Check: aws, terraform, jq, curl','Verify: aws sts get-caller-identity','Check: *.tf files exist','Print install links if missing'], tags: [] },
-  { id: 'phase_configure', label: '1: Configure', path: 'scripts/il-install.sh#phase1', layer: 'installer', x: 370, y: 620, badge: 'Phase', badgeColor: '#d2a8ff', desc: 'Interactive prompts: tenant ID, AWS region, CIDRs, EC2/DocDB, HTTPS, Snowflake, auth.', details: ['Tenant ID + display name','AWS region + AZs','Office/VPN CIDRs','Snowflake + Entra ID creds','Generates terraform.tfvars','Saves .install-state'], tags: [] },
-  { id: 'phase_infra', label: '2: Infrastructure', path: 'scripts/il-install.sh#phase2', layer: 'installer', x: 660, y: 620, badge: 'Phase', badgeColor: '#d2a8ff', desc: 'terraform init/plan/apply (~25 min). Captures outputs.', details: ['terraform init','terraform plan (user confirms)','terraform apply (~25 min)','Captures outputs to state file'], tags: [] },
-  { id: 'phase_secrets', label: '3: Secrets', path: 'scripts/il-install.sh#phase3', layer: 'installer', x: 950, y: 620, badge: 'Phase', badgeColor: '#d2a8ff', desc: 'Populates Secrets Manager with creds + DocDB endpoint from TF output.', details: ['aws secretsmanager put-secret-value','Includes DocDB endpoint from TF output','Snowflake creds into secret JSON','Two-phase bootstrap pattern'], tags: [] },
-  { id: 'phase_deploy', label: '4: Deploy', path: 'scripts/il-install.sh#phase4', layer: 'installer', x: 1240, y: 620, badge: 'Phase', badgeColor: '#d2a8ff', desc: 'SSM into EC2, ECR cross-account pull, start API + web containers.', details: ['SSM into EC2 instance','ECR cross-account login','Pull API + web images','Download DocDB TLS cert','docker run both containers'], tags: [] },
-  { id: 'phase_verify', label: '5: Verify', path: 'scripts/il-install.sh#phase5', layer: 'installer', x: 1530, y: 620, badge: 'Phase', badgeColor: '#d2a8ff', desc: 'Health checks, prints summary with DNS records and next steps.', details: ['Health check: API + web','Verify secret exists','Print LB DNS names','Print DNS CNAME records','Print Entra ID setup steps'], tags: [] },
+  { id: 'phase_preflight', label: '0: Preflight', path: 'scripts/phases/00-preflight.sh', layer: 'installer', x: 80, y: 620, badge: 'Phase', badgeColor: '#d2a8ff', desc: 'Validates all tools (AWS CLI v2+, Terraform, jq, curl, openssl) and AWS auth. Also run lazily per-phase via require_tools().', details: ['require_tools: aws, terraform, jq, curl, openssl','require_aws_auth: sts get-caller-identity','Check: main.tf + modules/ exist','Lazy validation: each phase checks its own deps'], tags: [] },
+  { id: 'phase_configure', label: '1: Configure', path: 'scripts/phases/01-configure.sh', layer: 'installer', x: 370, y: 620, badge: 'Phase', badgeColor: '#d2a8ff', desc: 'Interactive prompts with guided context. Password confirmation on sensitive fields. Idempotent: skips if state complete.', details: ['Environment name (not tenant ID)','LB allowlist with guided examples','Password confirmation (double-entry)','Defaults image version from .il-version','Generates terraform.tfvars (chmod 600)','Idempotent: skip if state_has_keys + tfvars exists'], tags: [] },
+  { id: 'phase_infra', label: '2: Infrastructure', path: 'scripts/phases/02-infra.sh', layer: 'installer', x: 660, y: 620, badge: 'Phase', badgeColor: '#d2a8ff', desc: 'terraform init/plan/apply (~25 min). Idempotent via plan -detailed-exitcode.', details: ['terraform init','plan -detailed-exitcode (0=no changes, 2=pending)','Skips apply if infrastructure up to date','Refreshes outputs to state even when skipped','terraform apply (~25 min if changes)'], tags: [] },
+  { id: 'phase_secrets', label: '3: Secrets', path: 'scripts/phases/03-secrets.sh', layer: 'installer', x: 950, y: 620, badge: 'Phase', badgeColor: '#d2a8ff', desc: 'Populates Secrets Manager. Idempotent: compares live secret (jq -S sorted) before writing.', details: ['Reads current secret from Secrets Manager','Compares with jq -S sorted keys','Skips write if values match','Updates only on credential changes','Two-phase bootstrap: TF shell + installer fill'], tags: [] },
+  { id: 'phase_deploy', label: '4: Deploy', path: 'scripts/phases/04-deploy.sh', layer: 'installer', x: 1240, y: 620, badge: 'Phase', badgeColor: '#d2a8ff', desc: 'SSM into EC2, ECR pull, start containers. Idempotent: checks running image versions.', details: ['docker inspect via SSM to check versions','Skips if target version already running','ECR cross-account login + pull','Download DocDB TLS cert (if missing)','docker run API + web containers'], tags: [] },
+  { id: 'phase_verify', label: '5: Verify', path: 'scripts/phases/05-verify.sh', layer: 'installer', x: 1530, y: 620, badge: 'Phase', badgeColor: '#d2a8ff', desc: 'Health checks, prints summary. Offers to delete state file (contains plaintext passwords).', details: ['Health check: API + web via SSM','Verify secret exists','Print LB DNS names + CNAME records','Print Entra ID setup steps','Prompt to delete .install-state (security)'], tags: [] },
 
-  { id: 'pkg_script', label: 'Package Script', path: 'scripts/package-client-infra.sh', layer: 'packaging', x: 200, y: 880, badge: 'Script', badgeColor: '#f0883e', desc: 'Bundles TF modules, client env, installer, docs into zip. Rewrites module paths.', details: ['Copies 7 TF modules','Copies client env files','Rewrites ../../modules/ to ./modules/','Includes installer + docs','Output: dist/*.zip'], tags: [] },
-  { id: 'pkg_zip', label: 'Release ZIP', path: 'dist/intellilake-infra-vX.Y.Z.zip', layer: 'packaging', x: 560, y: 880, badge: 'Artifact', badgeColor: '#f0883e', desc: 'Self-contained (~52KB, 33 files). Client extracts and runs il-install.sh.', details: ['modules/ (7 TF modules)','main.tf, variables.tf, outputs.tf, backend.tf','terraform.tfvars.example','il-install.sh','config/ (schema + examples)','prerequisites.md, SETUP-GUIDE.md'], tags: [] },
-  { id: 'pkg_installer', label: 'il-install.sh', path: 'scripts/il-install.sh', layer: 'packaging', x: 920, y: 880, badge: 'Script', badgeColor: '#f0883e', desc: 'Interactive installer (~500 lines). --resume, --phase, --dry-run, --auto-approve.', details: ['6 phases (0-5)','--resume from .install-state','--phase name re-run','--dry-run, --auto-approve','Secrets via -var (never on disk)'], tags: [] },
-  { id: 'pkg_delivery', label: 'Client Delivery', path: 'docs/clients/packaging-guide.md', layer: 'packaging', x: 1280, y: 880, badge: 'Process', badgeColor: '#f0883e', desc: 'IL team builds zip, sends to client. Client extracts and runs installer.', details: ['IL team: just tf-package-client vX.Y.Z','Send zip via secure channel','Client: unzip + ./il-install.sh','~1 hour end-to-end'], tags: [] },
+  { id: 'pkg_script', label: 'Package Script', path: 'scripts/package-client-infra.sh', layer: 'packaging', x: 200, y: 880, badge: 'Script', badgeColor: '#f0883e', desc: 'Bundles TF modules, installer (orchestrator + lib + phases), docs into zip. Embeds .il-version.', details: ['Copies 7 TF modules','Copies client env files','Rewrites ../../modules/ to ./modules/','Copies il-install.sh + lib/ + phases/','Writes .il-version for default image tag','Output: dist/*.zip'], tags: [] },
+  { id: 'pkg_zip', label: 'Release ZIP', path: 'dist/intellilake-infra-vX.Y.Z.zip', layer: 'packaging', x: 560, y: 880, badge: 'Artifact', badgeColor: '#f0883e', desc: 'Self-contained package. Modular installer with orchestrator, shared lib, and 6 standalone phase scripts.', details: ['modules/ (7 TF modules)','main.tf, variables.tf, outputs.tf, backend.tf','il-install.sh (orchestrator, ~155 lines)','lib/common.sh (shared utilities)','phases/00-05-*.sh (standalone scripts)','.il-version (default image tag)','config/ (schema + examples)'], tags: [] },
+  { id: 'pkg_installer', label: 'Modular Installer', path: 'scripts/il-install.sh', layer: 'packaging', x: 920, y: 880, badge: 'Script', badgeColor: '#f0883e', desc: 'Orchestrator + 6 standalone phase scripts. Idempotent, lazy validation, --force override.', details: ['il-install.sh: thin orchestrator (~155 lines)','lib/common.sh: shared utilities','phases/*.sh: standalone or orchestrated','--resume, --phase, --dry-run, --force','Each phase idempotent (skip if current)','chmod 600 state file + delete prompt'], tags: [] },
+  { id: 'pkg_delivery', label: 'Client Delivery', path: 'docs/clients/packaging-guide.md', layer: 'packaging', x: 1280, y: 880, badge: 'Process', badgeColor: '#f0883e', desc: 'IL team builds zip, sends to client. Client extracts and runs installer or individual phases.', details: ['IL team: just tf-package-client vX.Y.Z','Send zip via secure channel','Client: unzip + ./il-install.sh','Or: ./phases/03-secrets.sh --dry-run','~1 hour end-to-end'], tags: [] },
 
   { id: 'doc_prereqs', label: 'Prerequisites', path: 'docs/clients/prerequisites.md', layer: 'docs', x: 200, y: 1100, badge: 'Doc', badgeColor: '#ff7b72', desc: 'What to gather: AWS admin, Snowflake service user, Entra ID, network CIDRs.', details: ['AWS admin access + CLI','Snowflake: account, user, password, warehouse','Entra ID: client ID, tenant ID, secret','Network: office/VPN CIDRs'], tags: [] },
   { id: 'doc_install', label: 'Install Guide', path: 'docs/clients/install-guide.md', layer: 'docs', x: 540, y: 1100, badge: 'Doc', badgeColor: '#ff7b72', desc: 'Phase-by-phase walkthrough, troubleshooting, post-install DNS/HTTPS/Entra.', details: ['Phase-by-phase walkthrough','Resource table (what TF creates)','Resumability guide','Troubleshooting table','Post-install: DNS, HTTPS, Entra'], tags: [] },
@@ -977,7 +977,7 @@ function renderFileTree() {
     [2,'load_balancer/','ALB + NLB'],[2,'secrets/','Secrets Manager'],[2,'airflow/','ECS + RDS + Redis'],
     [1,'environments/',''],[2,'shared/','ECR + OIDC'],[2,'staging/','Full stack (small)'],
     [2,'production/','Full stack (HA)'],[2,'client/','Dedicated instance'],
-    [0,'scripts/',''],[1,'il-install.sh','Interactive installer'],[1,'package-client-infra.sh','Build release zip'],
+    [0,'scripts/',''],[1,'il-install.sh','Orchestrator (~155 lines)'],[1,'lib/',''],[2,'common.sh','Shared utilities'],[1,'phases/',''],[2,'00-preflight.sh','Tool + AWS validation'],[2,'01-configure.sh','Interactive config'],[2,'02-infra.sh','Terraform apply'],[2,'03-secrets.sh','Secrets Manager'],[2,'04-deploy.sh','Container deployment'],[2,'05-verify.sh','Health checks'],[1,'package-client-infra.sh','Build release zip'],
     [0,'docs/clients/',''],[1,'prerequisites.md','What to gather'],[1,'install-guide.md','Step-by-step'],
     [1,'upgrade-guide.md','Version upgrades'],[1,'packaging-guide.md','Internal: build zip'],
   ];
@@ -1171,14 +1171,14 @@ function renderFlow() {
   b2.style.background = 'rgba(88,166,255,0.15)'; b2.style.color = '#58a6ff'; b2.style.border = '1px solid rgba(88,166,255,0.3)';
   h2.appendChild(b2);
   h2.appendChild(createEl('span', { className: 'flow-section-title' }, 'Release Package Contents'));
-  h2.appendChild(createEl('span', { className: 'flow-section-subtitle' }, 'intellilake-infra-v2.1.0.zip  ~52KB, 33 files'));
+  h2.appendChild(createEl('span', { className: 'flow-section-subtitle' }, 'intellilake-infra-v2.1.0.zip'));
   s2.appendChild(h2);
 
   var grid = createEl('div', { className: 'delivery-grid' });
   var deliveryItems = [
     { title: 'Terraform Modules', color: '#58a6ff', files: ['modules/networking/','modules/iam/','modules/ecr/','modules/ec2/','modules/documentdb/','modules/load_balancer/','modules/secrets/','modules/airflow/'] },
     { title: 'Root TF Files', color: '#3fb950', files: ['main.tf','variables.tf','outputs.tf','backend.tf','terraform.tfvars.example'] },
-    { title: 'Installer', color: '#d2a8ff', files: ['il-install.sh','(~500 lines, 6 phases)','--resume, --phase flags','--dry-run, --auto-approve'] },
+    { title: 'Modular Installer', color: '#d2a8ff', files: ['il-install.sh (orchestrator)','lib/common.sh (shared utils)','phases/00-preflight.sh','phases/01-configure.sh','phases/02-infra.sh','phases/03-05-*.sh','.il-version (default tag)'] },
     { title: 'Config Templates', color: '#ffa657', files: ['config/tenant.schema.json','config/*.example.json','(JSON Schema validation)'] },
     { title: 'Documentation', color: '#ff7b72', files: ['prerequisites.md','SETUP-GUIDE.md','(upgrade-guide.md)'] },
   ];
@@ -1215,7 +1215,7 @@ function renderFlow() {
   b3.style.background = 'rgba(63,185,80,0.15)'; b3.style.color = '#3fb950'; b3.style.border = '1px solid rgba(63,185,80,0.3)';
   h3.appendChild(b3);
   h3.appendChild(createEl('span', { className: 'flow-section-title' }, 'Installation Process'));
-  h3.appendChild(createEl('span', { className: 'flow-section-subtitle' }, './il-install.sh  ~45 min interactive'));
+  h3.appendChild(createEl('span', { className: 'flow-section-subtitle' }, './il-install.sh  ~45 min interactive \u2022 idempotent \u2022 modular'));
   s3.appendChild(h3);
 
   // Phase tracker
@@ -1264,8 +1264,8 @@ function renderFlow() {
   setupLane.appendChild(createEl('div', { className: 'swimlane-label' }, 'Setup'));
   var setupContent = createEl('div', { className: 'swimlane-content' });
   var setupCards = [
-    { id: 'pre', num: 'PHASE 0', title: 'Preflight', desc: 'Validates tools: AWS CLI v2+, Terraform 1.5+, jq, curl. Verifies AWS auth and checks TF files exist.', cmd: null },
-    { id: 'cfg', num: 'PHASE 1', title: 'Configure', desc: 'Interactive prompts for all values: tenant identity, AWS region/AZs, network CIDRs, instance sizes, credentials. Generates terraform.tfvars and saves .install-state for resumability.', cmd: null },
+    { id: 'pre', num: 'PHASE 0', title: 'Preflight', desc: 'Validates all tools (aws, terraform, jq, curl, openssl) and AWS auth. Also used lazily: each phase runs require_tools() for only its own dependencies.', cmd: './phases/00-preflight.sh' },
+    { id: 'cfg', num: 'PHASE 1', title: 'Configure', desc: 'Guided prompts with context: environment name (not "tenant ID"), LB allowlist with examples, password double-entry confirmation. Defaults image version from .il-version. Idempotent: skips if all state keys present. Generates terraform.tfvars (chmod 600).', cmd: './phases/01-configure.sh' },
   ];
   for (var sui = 0; sui < setupCards.length; sui++) {
     if (sui > 0) setupContent.appendChild(createEl('div', { className: 'flow-arrow' }, '\u2192'));
@@ -1284,8 +1284,8 @@ function renderFlow() {
   infraLane.appendChild(createEl('div', { className: 'swimlane-label' }, 'Provision'));
   var infraContent = createEl('div', { className: 'swimlane-content' });
   var infraCards = [
-    { id: 'inf', num: 'PHASE 2', title: 'Infrastructure', desc: 'terraform init, plan (user confirms), apply. ~25 min. Creates VPC, EC2, DocumentDB, load balancers, IAM, Secrets Manager shell. Captures outputs to state file.', cmd: 'terraform apply -var="docdb_password=***"' },
-    { id: 'sec', num: 'PHASE 3', title: 'Secrets', desc: 'Populates the Secrets Manager entry with actual creds + DocDB endpoint from TF output. This solves the bootstrap problem: TF creates the secret shell, then the installer fills it with the DocDB endpoint TF just provisioned.', cmd: 'aws secretsmanager put-secret-value ...' },
+    { id: 'inf', num: 'PHASE 2', title: 'Infrastructure', desc: 'terraform init, plan -detailed-exitcode, apply. Idempotent: exit code 0 means no changes needed (skips apply). Exit code 2 means changes pending (shows plan, confirms). Refreshes outputs to state even when skipped.', cmd: 'terraform plan -detailed-exitcode -out=install.tfplan' },
+    { id: 'sec', num: 'PHASE 3', title: 'Secrets', desc: 'Populates Secrets Manager with creds + DocDB endpoint. Idempotent: reads live secret, compares with jq -S sorted keys, skips write if values match. Solves the bootstrap problem: TF creates the secret shell, this phase fills it.', cmd: 'aws secretsmanager get-secret-value | jq -S .' },
   ];
   for (var ini = 0; ini < infraCards.length; ini++) {
     if (ini > 0) infraContent.appendChild(createEl('div', { className: 'flow-arrow' }, '\u2192'));
@@ -1307,8 +1307,8 @@ function renderFlow() {
   deployLane.appendChild(createEl('div', { className: 'swimlane-label' }, 'Deploy & Verify'));
   var deployContent = createEl('div', { className: 'swimlane-content' });
   var deployCards = [
-    { id: 'dep', num: 'PHASE 4', title: 'Deploy', desc: 'SSMs into EC2, authenticates to IntelliLake ECR (cross-account), pulls API + web Docker images, downloads DocumentDB TLS certificate, starts both containers.', cmd: 'aws ssm start-session ...' },
-    { id: 'ver', num: 'PHASE 5', title: 'Verify', desc: 'Health checks API + web containers via SSM. Verifies Secrets Manager entry. Prints infrastructure summary, DNS CNAME records to create, and remaining manual steps.' , cmd: './il-install.sh --phase verify' },
+    { id: 'dep', num: 'PHASE 4', title: 'Deploy', desc: 'Idempotent: checks running container image tags via SSM docker inspect. Skips stop/pull/start if target version already running and healthy. Otherwise: ECR login, pull images, download DocDB TLS cert, docker run both containers.', cmd: './phases/04-deploy.sh' },
+    { id: 'ver', num: 'PHASE 5', title: 'Verify', desc: 'Health checks API + web via SSM. Verifies secret exists. Prints summary with DNS CNAMEs and next steps. Offers to delete .install-state file (contains plaintext passwords \u2014 all creds now in Secrets Manager).', cmd: './phases/05-verify.sh' },
   ];
   for (var dpi = 0; dpi < deployCards.length; dpi++) {
     if (dpi > 0) deployContent.appendChild(createEl('div', { className: 'flow-arrow' }, '\u2192'));
@@ -1366,8 +1366,10 @@ function renderFlow() {
   var resumeContent = createEl('div', { className: 'swimlane-content' });
   var resumeCards = [
     { title: 'Resume All', desc: 'Loads .install-state, skips completed phases, continues from where it stopped.', cmd: './il-install.sh --resume' },
-    { title: 'Re-run Phase', desc: 'Re-execute a specific phase. Useful for re-deploying or re-verifying.', cmd: './il-install.sh --phase deploy' },
-    { title: 'Dry Run', desc: 'Shows what would happen without making changes. Good for reviewing before committing.', cmd: './il-install.sh --dry-run' },
+    { title: 'Re-run Phase', desc: 'Re-execute a specific phase via orchestrator. Idempotent: skips if already current.', cmd: './il-install.sh --phase deploy' },
+    { title: 'Run Standalone', desc: 'Each phase is a standalone script. Run directly without the orchestrator.', cmd: './phases/03-secrets.sh --dry-run' },
+    { title: 'Force Re-run', desc: 'Override idempotency checks. Re-executes even if the phase detects no changes.', cmd: './il-install.sh --phase secrets --force' },
+    { title: 'Dry Run', desc: 'Shows what would happen without making changes. Mutations show [DRY RUN] prefix.', cmd: './il-install.sh --dry-run' },
   ];
   for (var rci = 0; rci < resumeCards.length; rci++) {
     var rc = createEl('div', { className: 'flow-card' });
@@ -1384,12 +1386,12 @@ function renderFlow() {
 }
 
 var phasePromptMap = {
-  pre: 'Phase 0 (Preflight) validates that AWS CLI v2+, Terraform 1.5+, jq, and curl are installed, and that AWS credentials are configured.',
-  cfg: 'Phase 1 (Configure) collects all deployment parameters interactively: tenant ID, AWS region, network CIDRs, EC2/DocDB sizing, Snowflake credentials, and auth provider details. Saves to .install-state for resumability.',
-  inf: 'Phase 2 (Infrastructure) runs terraform init/plan/apply to provision VPC, EC2, DocumentDB, load balancers, IAM roles, and Secrets Manager. Takes ~25 minutes.',
-  sec: 'Phase 3 (Secrets) solves the bootstrap problem: Terraform created the secret shell, but the DocDB endpoint was not known until Phase 2 completed. This phase populates the secret with the actual connection string and Snowflake credentials.',
-  dep: 'Phase 4 (Deploy) SSMs into the EC2 instance, authenticates to IntelliLake ECR (cross-account pull), downloads Docker images and the DocumentDB TLS certificate, then starts both API and web containers.',
-  ver: 'Phase 5 (Verify) runs health checks against both containers, verifies the Secrets Manager entry, and prints DNS CNAME records to create plus remaining manual steps (HTTPS, Entra ID).',
+  pre: 'Phase 0 (Preflight) — scripts/phases/00-preflight.sh. Validates AWS CLI v2+, Terraform 1.5+, jq, curl, and openssl are installed, and that AWS credentials are configured. Each phase also lazy-validates only the tools it needs (e.g. Phase 2 checks terraform but not curl). Runnable standalone: ./phases/00-preflight.sh',
+  cfg: 'Phase 1 (Configure) — scripts/phases/01-configure.sh. Interactive wizard collecting environment name (not "tenant ID" — renamed for clarity), AWS region, network allowlist (with guided examples: office IP, VPN range, checkip.amazonaws.com tip), EC2/DocDB sizing, Snowflake credentials, and auth provider. Sensitive fields require double-entry confirmation. Saves to .install-state (chmod 600) for resumability. Idempotent: skips if all required keys present and terraform.tfvars exists. Reads .il-version for default image version.',
+  inf: 'Phase 2 (Infrastructure) — scripts/phases/02-infra.sh. Runs terraform init/plan/apply to provision VPC, EC2, DocumentDB, load balancers, IAM roles, and Secrets Manager. Idempotent via terraform plan -detailed-exitcode: exit 0 = no changes (skips apply, still refreshes outputs), exit 2 = changes pending (shows plan, confirms, applies). Takes ~25 minutes on first run.',
+  sec: 'Phase 3 (Secrets) — scripts/phases/03-secrets.sh. Solves the bootstrap problem: Terraform created the secret shell, but the DocDB endpoint was not known until Phase 2 completed. Populates the secret with connection string and Snowflake credentials. Idempotent: reads live secret from Secrets Manager, compares with jq -S sorted keys — skips write if values match.',
+  dep: 'Phase 4 (Deploy) — scripts/phases/04-deploy.sh. SSMs into EC2, authenticates to IntelliLake ECR (cross-account pull), downloads Docker images and DocumentDB TLS certificate, starts API and web containers. Idempotent: checks running container image tags via SSM docker inspect — skips pull/restart if target version already running. Supports air-gapped (manual tar) path.',
+  ver: 'Phase 5 (Verify) — scripts/phases/05-verify.sh. Health checks via SSM against both containers, verifies Secrets Manager entry, prints infrastructure summary and DNS CNAME records. Lists remaining manual steps (HTTPS cert, Entra ID redirect URIs). Offers to delete .install-state after successful install (contains plaintext passwords, all now in Secrets Manager).',
 };
 
 function updateFlowPrompt() {
@@ -1397,7 +1399,7 @@ function updateFlowPrompt() {
   if (flowHighlight && phasePromptMap[flowHighlight]) {
     prompt = phasePromptMap[flowHighlight];
   } else {
-    prompt = 'Client deployment flow: IL team packages release (scripts/package-client-infra.sh), delivers zip with 7 TF modules + installer + docs. Client runs ./il-install.sh which walks through 6 phases: preflight, configure, infrastructure (~25 min), secrets bootstrap, deploy containers, verify. Post-install: DNS, HTTPS, Entra ID.';
+    prompt = 'Client deployment flow: IL team runs scripts/package-client-infra.sh to bundle 7 TF modules + modular installer (orchestrator + lib/common.sh + 6 phase scripts) + docs into a versioned zip with embedded .il-version. Client runs ./il-install.sh which orchestrates 6 idempotent phases: preflight → configure → infrastructure (~25 min) → secrets bootstrap → deploy containers → verify. Each phase is standalone-runnable (./phases/0N-*.sh), lazy-validates only its own tools, skips if already up-to-date (--force to override), and supports --resume/--dry-run. Sensitive fields use printf -v (no eval), double-entry confirmation, chmod 600 state file, with deletion prompt after install. Post-install: DNS CNAMEs, HTTPS cert, Entra ID redirect URIs.';
   }
   document.getElementById('prompt-text').textContent = prompt;
 }
