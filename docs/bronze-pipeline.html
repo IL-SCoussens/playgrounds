@@ -356,37 +356,41 @@ function stageReadAndClean(inputData) {
   };
 }
 
-// --- Stage 1: CanonicalDedup ---
+// --- Stage 1: CanonicalDedup (soft-delete) ---
 function stageCanonicalDedup(inputRows) {
   const rows = deepCloneRows(inputRows);
   const seen = new Map();
-  const surviving = [], removed = [], changes = [];
+  const changes = [];
+  let dupes = 0;
 
-  for (const row of rows) {
+  rows.forEach((row, i) => {
     const mk = mkKey(row.LEVEL_ONE, row.LEVEL_TWO);
     const l1c = normalize(row.LEVEL_ONE);
     const l2c = normalize(row.LEVEL_TWO);
-    if (seen.has(mk)) {
-      removed.push(row);
-      changes.push({
-        type: 'removed', cls: 'removed', tag: 'DUPE', tagCls: 'rm',
-        text: (row.LEVEL_ONE || '(blank)') + ', ' + (row.LEVEL_TWO || '(blank)') + ' — duplicate of row ' + (seen.get(mk) + 1),
-        fromText: (row.LEVEL_ONE || '(blank)') + ', ' + (row.LEVEL_TWO || '(blank)'),
-        detail: 'duplicate of row ' + (seen.get(mk) + 1),
-      });
-      continue;
-    }
-    seen.set(mk, surviving.length);
     row.LEVEL_ONE_clean = l1c;
     row.LEVEL_TWO_clean = l2c;
     row._mergeKey = mk;
-    surviving.push(row);
-  }
+
+    if (seen.has(mk)) {
+      row._status = 'duplicate';
+      row._statusReason = 'duplicate of row ' + seen.get(mk);
+      dupes++;
+      changes.push({
+        type: 'removed', cls: 'removed', tag: 'DUPE', tagCls: 'rm',
+        fromText: (row.LEVEL_ONE || '(blank)') + ', ' + (row.LEVEL_TWO || '(blank)'),
+        detail: 'marked as duplicate of row ' + seen.get(mk),
+      });
+    } else {
+      seen.set(mk, i + 1);
+      row._status = 'active';
+      row._statusReason = '';
+    }
+  });
   return {
     name: 'CanonicalDedup', enabled: state.stages.canonicalDedup, color: 'var(--red)',
-    desc: 'Case/whitespace-insensitive dedup. Normalizes to merge key, keeps first occurrence. DESTRUCTIVE.',
-    inputRows: rows, outputRows: surviving, removedRows: removed, changes,
-    stats: { dupes: removed.length, surviving: surviving.length },
+    desc: 'Case/whitespace-insensitive dedup. Soft-delete: duplicates marked _status="duplicate" but preserved in output.',
+    inputRows: deepCloneRows(inputRows), outputRows: rows, changes,
+    stats: { dupes, active: rows.length - dupes, total: rows.length },
   };
 }
 
@@ -397,6 +401,7 @@ function stageVariantAttribution(inputRows) {
   let acronymsPreserved = 0;
 
   for (const row of rows) {
+    if (row._status && row._status !== 'active') continue;
     const oldL1 = row.LEVEL_ONE_clean;
     const oldL2 = row.LEVEL_TWO_clean;
     row.LEVEL_ONE_clean = acronymAwareTitle(oldL1, state.config.acronymMinLength, state.config.acronyms);
@@ -434,6 +439,7 @@ function stageFillBlankL2(inputRows) {
   const rows = deepCloneRows(inputRows);
   const changes = [];
   for (const row of rows) {
+    if (row._status && row._status !== 'active') continue;
     if (!row.LEVEL_TWO_clean || row.LEVEL_TWO_clean.trim() === '') {
       row._l2WasBlank = true;
       row.LEVEL_TWO_clean = row.LEVEL_ONE_clean;
@@ -461,9 +467,10 @@ function stageRemoveModifiers(inputRows) {
   let collisionsPrevented = 0, emptyPrevented = 0, stripped = 0;
 
   const existingKeys = new Map();
-  rows.forEach((r, i) => { if (!existingKeys.has(r._mergeKey)) existingKeys.set(r._mergeKey, i); });
+  rows.forEach((r, i) => { if ((!r._status || r._status === 'active') && !existingKeys.has(r._mergeKey)) existingKeys.set(r._mergeKey, i); });
 
   for (const row of rows) {
+    if (row._status && row._status !== 'active') continue;
     for (const [field, otherField] of [['LEVEL_ONE_clean', 'LEVEL_TWO_clean'], ['LEVEL_TWO_clean', 'LEVEL_ONE_clean']]) {
       const [strippedVal, removedToken] = stripModifier(row[field], modTokens);
       if (removedToken == null) continue;
@@ -511,8 +518,10 @@ function stageBronzeFinalize(inputRows) {
   const rows = deepCloneRows(inputRows);
   const changes = [];
 
+  // Only consider active rows for multi-parent detection
   const l2Parents = new Map();
   rows.forEach((row, i) => {
+    if (row._status && row._status !== 'active') return;
     const l2 = row.LEVEL_TWO_clean || '';
     const l1 = row.LEVEL_ONE_clean || '';
     if (!l2 || !l1) return;
@@ -522,8 +531,8 @@ function stageBronzeFinalize(inputRows) {
     parentMap.get(l1).push(i);
   });
 
-  const indicesToRemove = new Set();
   const resolutions = [];
+  let rowsMarked = 0;
 
   for (const [l2, parentMap] of l2Parents) {
     if (parentMap.size <= 1) continue;
@@ -537,33 +546,36 @@ function stageBronzeFinalize(inputRows) {
       canonicalL1 = allL1[0];
     }
     const dropped = allL1.filter(l1 => l1 !== canonicalL1);
-    for (const l1 of dropped) { for (const idx of parentMap.get(l1)) indicesToRemove.add(idx); }
+    for (const l1 of dropped) {
+      for (const idx of parentMap.get(l1)) {
+        rows[idx]._status = 'non_canonical';
+        rows[idx]._statusReason = 'canonical parent is ' + canonicalL1 + ' (strategy: ' + state.config.strategy + ')';
+        rowsMarked++;
+      }
+    }
     resolutions.push({ l2, canonicalL1, allL1, dropped });
     changes.push({
       type: 'resolved', cls: 'resolved', tag: 'RESOLVE', tagCls: 'res',
-      text: '"' + l2 + '" -> keep ' + canonicalL1 + ', drop ' + dropped.join(', '),
+      text: '"' + l2 + '" -> keep ' + canonicalL1 + ', mark ' + dropped.join(', '),
       l2, keep: canonicalL1, drop: dropped,
     });
   }
 
-  const removedRows = [], surviving = [];
-  rows.forEach((row, i) => {
-    if (indicesToRemove.has(i)) {
-      removedRows.push(row);
-    } else {
-      row.LEVEL_ONE_original = row.LEVEL_ONE;
-      row.LEVEL_TWO_original = row.LEVEL_TWO;
-      row.LEVEL_ONE = row.LEVEL_ONE_clean;
-      row.LEVEL_TWO = row.LEVEL_TWO_clean;
-      surviving.push(row);
-    }
+  // Promote _clean into original columns for all rows
+  rows.forEach(row => {
+    row.LEVEL_ONE_original = row.LEVEL_ONE;
+    row.LEVEL_TWO_original = row.LEVEL_TWO;
+    row.LEVEL_ONE = row.LEVEL_ONE_clean;
+    row.LEVEL_TWO = row.LEVEL_TWO_clean;
   });
+
+  const activeCount = rows.filter(r => !r._status || r._status === 'active').length;
 
   return {
     name: 'BronzeFinalize', enabled: state.stages.bronzeFinalize, color: 'var(--cyan)',
-    desc: 'Resolve multi-parent L2 values (pick canonical parent, remove non-canonical rows). Promote _clean values into original column keys.',
-    inputRows: deepCloneRows(inputRows), outputRows: surviving, removedRows, changes,
-    stats: { multiParent: resolutions.length, rowsRemoved: indicesToRemove.size },
+    desc: 'Resolve multi-parent L2 values (soft-delete: mark non-canonical rows). Promote _clean values into original column keys.',
+    inputRows: deepCloneRows(inputRows), outputRows: rows, changes,
+    stats: { multiParent: resolutions.length, rowsMarked, active: activeCount, total: rows.length },
   };
 }
 
@@ -792,6 +804,8 @@ function renderStageDetail() {
     const cols = ['#', 'LEVEL_ONE', 'LEVEL_TWO'];
     if (showClean && rows[0] && rows[0].LEVEL_ONE_clean !== undefined) cols.push('LEVEL_ONE_clean', 'LEVEL_TWO_clean');
     if (showMerge && rows[0] && rows[0]._mergeKey !== undefined) cols.push('_mergeKey');
+    // Show _status column if any row has it
+    if (rows[0] && rows[0]._status !== undefined) cols.push('_status');
 
     const table = el('table');
     const thead = el('thead');
@@ -802,38 +816,26 @@ function renderStageDetail() {
 
     const tbody = el('tbody');
 
-    // Surviving rows
     rows.forEach((row, i) => {
-      const tr = el('tr');
+      const isInactive = row._status && row._status !== 'active';
+      const tr = el('tr', isInactive ? {class: 'removed'} : {});
       cols.forEach(col => {
         if (col === '#') { tr.appendChild(el('td', {style: 'color:var(--muted)'}, String(i + 1))); return; }
         let val = row[col];
         let cls = '';
         if (val == null || val === '') { val = '(blank)'; cls = 'blank'; }
-        if (col === 'LEVEL_TWO_clean' && row._l2WasBlank) cls = 'filled';
-        if (col.includes('clean') && row._modifierRemoved) {
-          const isTargetField = (col.includes('ONE') && row._modifierField === 'LEVEL_ONE_clean') ||
-                                (col.includes('TWO') && row._modifierField === 'LEVEL_TWO_clean');
-          if (isTargetField) cls = 'modified';
+        if (!isInactive) {
+          if (col === 'LEVEL_TWO_clean' && row._l2WasBlank) cls = 'filled';
+          if (col.includes('clean') && row._modifierRemoved) {
+            const isTargetField = (col.includes('ONE') && row._modifierField === 'LEVEL_ONE_clean') ||
+                                  (col.includes('TWO') && row._modifierField === 'LEVEL_TWO_clean');
+            if (isTargetField) cls = 'modified';
+          }
         }
         tr.appendChild(el('td', {class: cls, title: String(val)}, String(val)));
       });
       tbody.appendChild(tr);
     });
-
-    // Removed rows
-    if (result.removedRows && result.removedRows.length > 0) {
-      result.removedRows.forEach(row => {
-        const tr = el('tr', {class: 'removed'});
-        cols.forEach(col => {
-          if (col === '#') { tr.appendChild(el('td', null, '\u2212')); return; }
-          let val = row[col];
-          if (val == null || val === '') val = '(blank)';
-          tr.appendChild(el('td', {title: String(val)}, String(val)));
-        });
-        tbody.appendChild(tr);
-      });
-    }
 
     table.appendChild(tbody);
     parent.appendChild(table);
