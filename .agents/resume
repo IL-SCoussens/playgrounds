@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+
+if [[ ! -x node_modules/.bin/next ]]; then
+  echo "[resume] Dependencies are missing. Run .agents/setup to repair this orb." >&2
+  exit 1
+fi
+
+if [[ ! -e users.json ]]; then
+  printf '[]\n' > users.json
+fi
+
+echo "[resume] Ready. Start the development portal with: amp orb services ensure"

@@ -1,0 +1,10 @@
+services:
+  playgrounds:
+    command: npm run dev -- --hostname 0.0.0.0 --port "$PORT"
+    health: /login
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+    portal:
+      url: /login
+      title: Intellilake Playgrounds
+      description: Development login page. No user accounts are seeded by orb setup.
