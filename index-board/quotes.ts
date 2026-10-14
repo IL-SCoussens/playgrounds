@@ -27,7 +27,8 @@ export function parseQuote(payload: unknown) {
   if (!Array.isArray(chart.result) || chart.result.length === 0) {
     throw new Error("Quote provider returned no results");
   }
-  const meta = object(object(chart.result[0]).meta);
+  const result = object(chart.result[0]);
+  const meta = object(result.meta);
   const price = positiveNumber(meta.regularMarketPrice);
   const previousClose = positiveNumber(
     meta.previousClose === undefined ? meta.chartPreviousClose : meta.previousClose,
@@ -38,7 +39,16 @@ export function parseQuote(payload: unknown) {
   const change = price - previousClose;
   const changePercent = (change / previousClose) * 100;
   if (!Number.isFinite(changePercent)) throw new Error("Invalid quote change");
-  return { price, previousClose, change, changePercent, updatedAt: date.toISOString() };
+  const indicators = object(result.indicators ?? {});
+  const candle = Array.isArray(indicators.quote) ? indicators.quote[0] : undefined;
+  const close = object(candle ?? {}).close;
+  const closes = Array.isArray(close)
+    ? close.filter((value: unknown): value is number => typeof value === "number" && Number.isFinite(value))
+    : [];
+  const series = closes.length <= 32
+    ? closes
+    : Array.from({ length: 32 }, (_, index) => closes[Math.round(index * (closes.length - 1) / 31)]);
+  return { price, previousClose, change, changePercent, updatedAt: date.toISOString(), series };
 }
 
 type Quote = ReturnType<typeof parseQuote>;
