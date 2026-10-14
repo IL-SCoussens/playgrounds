@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+SECONDS=0
+
+echo "[setup] Checking the orb toolchain"
+for tool in node npm bun git jq gh; do
+  if ! command -v "$tool" >/dev/null 2>&1; then
+    echo "[setup] Missing $tool; use an Amp orb base with the standard development tools." >&2
+    exit 1
+  fi
+done
+printf '[setup] Node %s; npm %s; Bun %s\n' "$(node --version)" "$(npm --version)" "$(bun --version)"
+
+signature=$(
+  {
+    sha256sum package.json package-lock.json
+    node --version
+    npm --version
+    node -p 'process.platform + ":" + process.arch'
+  } | sha256sum | cut -d ' ' -f 1
+)
+marker=node_modules/.amp-install-signature
+
+echo "[setup] Checking restored npm dependencies"
+if [[ -f "$marker" && "$(cat "$marker")" == "$signature" ]] \
+  && [[ -x node_modules/.bin/next ]] \
+  && npm ls --all --include=dev --offline >/dev/null 2>&1; then
+  echo "[setup] Dependencies match the lockfile and toolchain; keeping node_modules"
+else
+  echo "[setup] Installing locked npm dependencies"
+  npm ci --include=dev --prefer-offline --no-audit --no-fund
+  printf '%s\n' "$signature" > "$marker"
+fi
+
+printf '[setup] Ready in %ss. No credentials, user accounts or servers were created.\n' "$SECONDS"
