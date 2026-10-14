@@ -52,6 +52,9 @@ against the previous close. Values are index points, not prices to compare
 across currencies. The browser displays quote timestamps in the viewer's local
 time zone; a timestamp can be old when a market is closed.
 
+Intraday sparklines use up to 32 evenly sampled Yahoo closing values, green when
+the last value is above the previous close and red otherwise.
+
 ## Refresh and failure behavior
 
 - The browser refreshes every 60 seconds.
@@ -85,6 +88,7 @@ The quote endpoint returns this JSON shape:
       previousClose: number,
       change: number,
       changePercent: number,
+      series: number[],
       updatedAt: string // ISO quote timestamp
     } | null
   }]
