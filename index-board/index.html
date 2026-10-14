@@ -53,6 +53,11 @@
     .change { font-size: 1rem; font-weight: 600; margin-block-start: .5rem; }
     .change[data-direction="up"] { color: var(--green); }
     .change[data-direction="down"] { color: var(--red); }
+    .chart { display: grid; gap: .4rem; }
+    .sparkline { display: block; inline-size: 100%; block-size: 4rem; color: var(--red); }
+    .sparkline[hidden] { display: none; }
+    .sparkline[data-direction="up"] { color: var(--green); }
+    .chart-label { color: var(--muted); font-size: .75rem; }
     .quote-footer { margin-block-start: auto; border-block-start: 1px solid var(--line); padding-block-start: .85rem; color: var(--muted); font-size: .75rem; }
     .price, .change, time { font-variant-numeric: tabular-nums; }
     .notes { display: grid; gap: .6rem; margin-block-start: 1.5rem; padding-block-start: 1.25rem; border-block-start: 1px solid var(--line); color: var(--muted); font-size: .8rem; }
@@ -123,12 +128,21 @@
       const price = element('p', 'price', '—');
       const change = element('p', 'change', '—');
       values.append(price, element('p', 'unit', 'Index points'), change, element('p', 'change-label', 'vs. previous close'));
+      const chart = element('div', 'chart', '');
+      const sparkline = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      sparkline.setAttribute('class', 'sparkline');
+      sparkline.setAttribute('viewBox', '0 0 300 64');
+      sparkline.setAttribute('preserveAspectRatio', 'none');
+      sparkline.setAttribute('role', 'img');
+      sparkline.setAttribute('hidden', '');
+      const chartLabel = element('p', 'chart-label', 'Awaiting intraday data');
+      chart.append(sparkline, chartLabel);
       const footer = element('p', 'quote-footer', '');
       const time = element('time', '', 'Awaiting quote');
       footer.append(time);
-      card.append(header, values, footer);
+      card.append(header, values, chart, footer);
       board.append(card);
-      cards.set(index.symbol, { badge, price, change, time });
+      cards.set(index.symbol, { badge, price, change, time, sparkline, chartLabel, name: index.name });
     }
 
     function validRow(row) {
@@ -136,7 +150,48 @@
       if (row.status === 'unavailable') return row.data === null;
       const data = row.data;
       return data && ['price', 'previousClose', 'change', 'changePercent'].every(key => typeof data[key] === 'number' && Number.isFinite(data[key]))
+        && Array.isArray(data.series) && data.series.length <= 32 && data.series.every(value => typeof value === 'number' && Number.isFinite(value))
         && typeof data.updatedAt === 'string' && Number.isFinite(Date.parse(data.updatedAt));
+    }
+
+    function renderSparkline(card, data) {
+      const series = data ? data.series : [];
+      const svg = card.sparkline;
+      svg.replaceChildren();
+      svg.toggleAttribute('hidden', series.length === 0);
+      svg.removeAttribute('aria-label');
+      delete svg.dataset.direction;
+      card.chartLabel.textContent = series.length ? `Intraday closes · ${series.length} ${series.length === 1 ? 'sample' : 'samples'}` : 'No intraday data';
+      if (!series.length) return;
+
+      const last = series[series.length - 1];
+      const above = last > data.previousClose;
+      svg.dataset.direction = above ? 'up' : 'down';
+      svg.setAttribute('aria-label', `${card.name} intraday closes: ${series.length} ${series.length === 1 ? 'sample' : 'samples'}, last ${number.format(last)}, ${above ? 'above' : last === data.previousClose ? 'equal to' : 'below'} previous close ${number.format(data.previousClose)}.`);
+      const scale = Math.max(...series.map(Math.abs)) || 1;
+      const values = series.map(value => value / scale);
+      const low = Math.min(...values);
+      const high = Math.max(...values);
+      const points = values.map((value, i) => [
+        series.length === 1 ? 150 : 4 + i * 292 / (series.length - 1),
+        high === low ? 32 : 60 - (value - low) / (high - low) * 56
+      ]);
+      const shape = document.createElementNS('http://www.w3.org/2000/svg', series.length === 1 ? 'circle' : 'polyline');
+      if (series.length === 1) {
+        shape.setAttribute('cx', points[0][0]);
+        shape.setAttribute('cy', points[0][1]);
+        shape.setAttribute('r', '3');
+        shape.setAttribute('fill', 'currentColor');
+      } else {
+        shape.setAttribute('points', points.map(point => point.join(',')).join(' '));
+        shape.setAttribute('fill', 'none');
+        shape.setAttribute('stroke', 'currentColor');
+        shape.setAttribute('stroke-width', '2');
+        shape.setAttribute('stroke-linejoin', 'round');
+        shape.setAttribute('stroke-linecap', 'round');
+        shape.setAttribute('vector-effect', 'non-scaling-stroke');
+      }
+      svg.append(shape);
     }
 
     function render(symbol, row) {
@@ -144,6 +199,7 @@
       card.badge.dataset.state = row.status;
       card.badge.textContent = row.status === 'fresh' ? 'Fresh' : row.status === 'stale' ? 'Stale' : 'Unavailable';
       const data = row.data;
+      renderSparkline(card, data);
       card.price.textContent = data ? number.format(data.price) : '—';
       card.change.textContent = data ? `${signed.format(data.change)} (${signed.format(data.changePercent)}%)` : 'No quote available';
       card.change.dataset.direction = data ? (data.change > 0 ? 'up' : data.change < 0 ? 'down' : 'flat') : 'flat';
