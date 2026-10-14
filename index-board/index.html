@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Index Board · Global stock indices</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: oklch(15% 0.012 255);
+      --surface: oklch(20% 0.015 255);
+      --line: oklch(31% 0.018 255);
+      --text: oklch(95% 0.005 255);
+      --muted: oklch(73% 0.018 255);
+      --green: oklch(81% 0.14 165);
+      --red: oklch(77% 0.15 25);
+      --amber: oklch(85% 0.13 85);
+      --gutter: clamp(1.25rem, 0.75rem + 2vw, 2.5rem);
+      --title: clamp(2rem, 1.5rem + 2vw, 3rem);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      overflow-wrap: break-word;
+      -webkit-text-size-adjust: 100%;
+    }
+    *, *::before, *::after { box-sizing: border-box; min-inline-size: 0; }
+    body { margin: 0; min-block-size: 100svh; background: var(--bg); color: var(--text); line-height: 1.5; }
+    main { max-inline-size: 76rem; margin-inline: auto; padding-inline: var(--gutter); padding-block: var(--gutter) 3rem; }
+    h1, h2, p { margin: 0; }
+    h1, h2 { text-wrap: balance; }
+    .masthead { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; padding-block-end: 1.5rem; border-block-end: 1px solid var(--line); }
+    .brand { font-weight: 700; letter-spacing: .12em; font-size: .8rem; }
+    .brand::before { content: ""; display: inline-block; inline-size: .65rem; block-size: .65rem; margin-inline-end: .65rem; background: var(--green); }
+    .cadence { margin-inline-start: auto; color: var(--muted); font-size: .8rem; }
+    .intro { display: grid; gap: .6rem; padding-block: 2.5rem 1.75rem; }
+    .eyebrow { color: var(--green); font-size: .75rem; letter-spacing: .15em; text-transform: uppercase; font-weight: 600; }
+    h1 { font-size: var(--title); letter-spacing: -.045em; line-height: 1.15; }
+    .description { color: var(--muted); max-inline-size: 42rem; }
+    .toolbar { display: flex; flex-wrap: wrap; align-items: baseline; gap: .5rem 1rem; padding-block: 1rem; }
+    .toolbar h2 { font-size: .95rem; font-weight: 600; }
+    #status { margin-inline-start: auto; color: var(--muted); font-size: .8rem; }
+    .board { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr)); gap: 1rem; }
+    .quote { background: var(--surface); border: 1px solid var(--line); border-radius: .65rem; padding: 1.5rem; display: flex; flex-direction: column; gap: 1.15rem; }
+    .quote-header { display: flex; align-items: start; gap: .75rem; }
+    .identity { flex: 1; }
+    .region { color: var(--muted); font-size: .7rem; letter-spacing: .1em; text-transform: uppercase; }
+    .quote h2 { font-size: 1.1rem; font-weight: 600; margin-block-start: .25rem; }
+    .symbol { color: var(--muted); font-size: .75rem; }
+    .badge { font-size: .7rem; border: 1px solid var(--line); border-radius: .25rem; padding: .15rem .45rem; color: var(--muted); white-space: nowrap; }
+    .badge[data-state="stale"] { color: var(--amber); border-color: color-mix(in oklch, var(--amber) 45%, var(--surface)); }
+    .badge[data-state="fresh"] { color: var(--green); }
+    .price { font-size: 2rem; line-height: 1.2; font-weight: 600; letter-spacing: -.035em; }
+    .unit, .change-label { color: var(--muted); font-size: .75rem; }
+    .change { font-size: 1rem; font-weight: 600; margin-block-start: .5rem; }
+    .change[data-direction="up"] { color: var(--green); }
+    .change[data-direction="down"] { color: var(--red); }
+    .quote-footer { margin-block-start: auto; border-block-start: 1px solid var(--line); padding-block-start: .85rem; color: var(--muted); font-size: .75rem; }
+    .price, .change, time { font-variant-numeric: tabular-nums; }
+    .notes { display: grid; gap: .6rem; margin-block-start: 1.5rem; padding-block-start: 1.25rem; border-block-start: 1px solid var(--line); color: var(--muted); font-size: .8rem; }
+    .notes strong { color: var(--text); font-weight: 500; }
+    a { color: var(--text); text-underline-offset: .25em; touch-action: manipulation; }
+    a:focus-visible { outline: 2px solid var(--green); outline-offset: .25em; }
+    a:active { color: var(--green); }
+    @media (hover: hover) and (pointer: fine) { a:hover { color: var(--green); } }
+  </style>
+</head>
+<body>
+  <main>
+    <header class="masthead">
+      <p class="brand">INDEX BOARD</p>
+      <p class="cadence">Automatic refresh · every 60 seconds</p>
+    </header>
+    <section class="intro" aria-labelledby="page-title">
+      <p class="eyebrow">Global equities</p>
+      <h1 id="page-title">The market, at a glance.</h1>
+      <p class="description">Six major stock indices across the United States, Europe and Asia. Changes are measured against the previous close.</p>
+    </section>
+    <div class="toolbar">
+      <h2 id="board-title">Index overview</h2>
+      <p id="status" role="status" aria-live="polite" aria-atomic="true">Loading quotes…</p>
+    </div>
+    <section class="board" id="board" aria-labelledby="board-title" aria-busy="true"></section>
+    <noscript><p>JavaScript is required to load quotes and refresh this board.</p></noscript>
+    <footer class="notes">
+      <p><strong>Prices come from a free source and may be delayed by up to 15 minutes.</strong></p>
+      <p>Source: <a href="https://finance.yahoo.com/">Yahoo Finance</a> · Quotes are retrieved via an unofficial Yahoo Finance chart endpoint.</p>
+      <p>Prices are index points, not currency. Quote timestamps use your local timezone. “Fresh” means the latest request succeeded, not real-time market data.</p>
+    </footer>
+  </main>
+  <script>
+    'use strict';
+    const indices = [
+      { symbol: '^GSPC', name: 'S&P 500', region: 'United States' },
+      { symbol: '^DJI', name: 'Dow Jones', region: 'United States' },
+      { symbol: '^IXIC', name: 'Nasdaq Composite', region: 'United States' },
+      { symbol: '^FTSE', name: 'FTSE 100', region: 'United Kingdom' },
+      { symbol: '^GDAXI', name: 'DAX', region: 'Germany' },
+      { symbol: '^N225', name: 'Nikkei 225', region: 'Japan' }
+    ];
+    const number = new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const signed = new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2, signDisplay: 'always' });
+    const dateTime = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'long' });
+    const board = document.getElementById('board');
+    const status = document.getElementById('status');
+    const saved = new Map();
+    const cards = new Map();
+    let pending = false;
+
+    function element(tag, className, text) {
+      const node = document.createElement(tag);
+      node.className = className;
+      node.textContent = text;
+      return node;
+    }
+
+    for (const index of indices) {
+      const card = element('article', 'quote', '');
+      const header = element('div', 'quote-header', '');
+      const identity = element('div', 'identity', '');
+      identity.append(element('p', 'region', index.region), element('h2', '', index.name), element('p', 'symbol', index.symbol));
+      const badge = element('span', 'badge', 'Loading');
+      header.append(identity, badge);
+      const values = element('div', 'values', '');
+      const price = element('p', 'price', '—');
+      const change = element('p', 'change', '—');
+      values.append(price, element('p', 'unit', 'Index points'), change, element('p', 'change-label', 'vs. previous close'));
+      const footer = element('p', 'quote-footer', '');
+      const time = element('time', '', 'Awaiting quote');
+      footer.append(time);
+      card.append(header, values, footer);
+      board.append(card);
+      cards.set(index.symbol, { badge, price, change, time });
+    }
+
+    function validRow(row) {
+      if (!row || !['fresh', 'stale', 'unavailable'].includes(row.status)) return false;
+      if (row.status === 'unavailable') return row.data === null;
+      const data = row.data;
+      return data && ['price', 'previousClose', 'change', 'changePercent'].every(key => typeof data[key] === 'number' && Number.isFinite(data[key]))
+        && typeof data.updatedAt === 'string' && Number.isFinite(Date.parse(data.updatedAt));
+    }
+
+    function render(symbol, row) {
+      const card = cards.get(symbol);
+      card.badge.dataset.state = row.status;
+      card.badge.textContent = row.status === 'fresh' ? 'Fresh' : row.status === 'stale' ? 'Stale' : 'Unavailable';
+      const data = row.data;
+      card.price.textContent = data ? number.format(data.price) : '—';
+      card.change.textContent = data ? `${signed.format(data.change)} (${signed.format(data.changePercent)}%)` : 'No quote available';
+      card.change.dataset.direction = data ? (data.change > 0 ? 'up' : data.change < 0 ? 'down' : 'flat') : 'flat';
+      card.time.textContent = data ? `Updated ${dateTime.format(new Date(data.updatedAt))}` : 'Quote time unavailable';
+      if (data) card.time.dateTime = data.updatedAt;
+      else card.time.removeAttribute('datetime');
+    }
+
+    async function refresh() {
+      if (pending) return;
+      pending = true;
+      board.setAttribute('aria-busy', 'true');
+      status.textContent = saved.size ? 'Refreshing quotes…' : 'Loading quotes…';
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 12000);
+      try {
+        const response = await fetch('/api/quotes', { signal: controller.signal, cache: 'no-store' });
+        if (!response.ok) throw new Error('Quote request failed');
+        const result = await response.json();
+        if (!Array.isArray(result.quotes)) throw new Error('Invalid quote response');
+        const rows = indices.map(index => result.quotes.find(row => row && row.symbol === index.symbol));
+        if (!rows.every(validRow)) throw new Error('Incomplete quote response');
+        rows.forEach((row, i) => {
+          saved.set(indices[i].symbol, row);
+          render(indices[i].symbol, row);
+        });
+        const stale = rows.filter(row => row.status === 'stale').length;
+        const unavailable = rows.filter(row => row.status === 'unavailable').length;
+        status.textContent = stale || unavailable ? `Quotes checked · ${stale} stale · ${unavailable} unavailable` : 'Quotes updated · all six received';
+      } catch {
+        for (const index of indices) {
+          const prior = saved.get(index.symbol);
+          render(index.symbol, prior && prior.data ? { ...prior, status: 'stale' } : { status: 'unavailable', data: null });
+        }
+        status.textContent = 'Refresh failed. Prior quotes are stale; missing quotes are unavailable. Retrying automatically.';
+      } finally {
+        clearTimeout(timeout);
+        pending = false;
+        board.setAttribute('aria-busy', 'false');
+      }
+    }
+    refresh();
+    setInterval(refresh, 60000);
+  </script>
+</body>
+</html>
