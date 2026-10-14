@@ -117,5 +117,21 @@ export function createQuoteCache({
     return current.inFlight;
   }
 
-  return { getQuotes: () => Promise.all(INDICES.map(getQuote)) };
+  function getHealth() {
+    let fresh = 0;
+    let stale = 0;
+    let oldestUpdatedAt: string | null = null;
+    for (const index of INDICES) {
+      const row = entries.get(index.symbol)?.row;
+      if (row?.status === "fresh") fresh++;
+      if (row?.status === "stale") stale++;
+      if (row?.data && (oldestUpdatedAt === null ||
+        Date.parse(row.data.updatedAt) < Date.parse(oldestUpdatedAt))) {
+        oldestUpdatedAt = row.data.updatedAt;
+      }
+    }
+    return { ok: fresh > 0, symbols: INDICES.length, fresh, stale, oldestUpdatedAt };
+  }
+
+  return { getQuotes: () => Promise.all(INDICES.map(getQuote)), getHealth };
 }

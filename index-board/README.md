@@ -72,6 +72,38 @@ the last value is above the previous close and red otherwise.
 `fresh` describes successful source retrieval, not a guarantee that the quote
 timestamp is recent or that the market is open.
 
+## Health
+
+`GET /healthz` reads the in-memory cache without fetching quotes or triggering a
+refresh. To inspect the response and HTTP status on the default port:
+
+```sh
+curl -i http://localhost:3001/healthz
+```
+
+Example response with two fresh, one stale, and three unavailable indices:
+
+```json
+{
+	"ok": true,
+	"symbols": 6,
+	"fresh": 2,
+	"stale": 1,
+	"oldestUpdatedAt": "2026-10-14T14:30:00.000Z"
+}
+```
+
+`symbols` counts all six configured indices, including unavailable ones.
+`fresh` and `stale` count stored statuses. Unavailable indices count in neither.
+`ok` is `fresh > 0`: the server returns HTTP 200 when at least one index is fresh
+and HTTP 503 otherwise. At cold start, `ok` is `false`, both status counts are
+zero, and `oldestUpdatedAt` is `null`.
+
+`oldestUpdatedAt` is the oldest cached source quote timestamp across fresh and
+stale data, in ISO format, or `null` when no data exists. As above, `fresh`
+reflects the last retrieval's success, not quote age. Health checks do not
+refresh these statuses.
+
 ## Quote response
 
 The quote endpoint returns this JSON shape:
