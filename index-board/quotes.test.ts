@@ -4,12 +4,16 @@ import { INDICES, createQuoteCache, parseQuote } from "./quotes";
 
 // Yahoo chart response captured 2026-10-14 with unrelated metadata removed.
 // Its candle close is intentionally distinct from the authoritative meta price.
-function payload(meta: Record<string, unknown> = {}) {
+function payload(
+  meta: Record<string, unknown> = {},
+  indicators: unknown = source.chart.result[0].indicators,
+) {
   return {
     chart: {
       result: [{
         ...source.chart.result[0],
         meta: { ...source.chart.result[0].meta, ...meta },
+        indicators,
       }],
       error: null,
     },
@@ -22,6 +26,7 @@ const quote = {
   change: 25,
   changePercent: 25,
   updatedAt: "2026-10-14T14:37:39.000Z",
+  series: [7753.8701171875],
 };
 const good = () => payload({ regularMarketPrice: 125, previousClose: 100 });
 const recovered = () => payload({ regularMarketPrice: 80, previousClose: 100 });
@@ -36,11 +41,42 @@ describe("parseQuote", () => {
     expect(parsed.change).toBeCloseTo(-51.58, 8);
     expect(parsed.changePercent).toBeCloseTo(-0.6608203242606119, 10);
     expect(parsed.updatedAt).toBe("2026-10-14T14:37:39.000Z");
+    expect(parsed.series).toEqual([7753.8701171875]);
   });
 
   test("prefers previousClose and calculates percentage against it", () => {
     expect(parseQuote(good())).toEqual(quote);
     expect(parseQuote(recovered())).toEqual(recoveredQuote);
+  });
+
+  test("samples 100 closes at evenly spaced positions after dropping nulls", () => {
+    const closes = Array.from({ length: 100 }, (_, index) => index);
+    const expected = [
+      0, 3, 6, 10, 13, 16, 19, 22, 26, 29, 32, 35, 38, 42, 45, 48,
+      51, 54, 57, 61, 64, 67, 70, 73, 77, 80, 83, 86, 89, 93, 96, 99,
+    ];
+    for (const close of [closes, [null, ...closes.flatMap(value => [value, null]), null]]) {
+      const parsed = parseQuote(payload({}, { quote: [{ close }] }));
+      expect(parsed.series).toEqual(expected);
+      expect(parsed.price).toBe(7753.87);
+    }
+  });
+
+  test("retains every valid close when there are at most 32", () => {
+    const close = [null, 12, 3, null, 25, null];
+    expect(parseQuote(payload({}, { quote: [{ close }] })).series).toEqual([12, 3, 25]);
+    const boundary = Array.from({ length: 32 }, (_, index) => index + 10);
+    expect(parseQuote(payload({}, { quote: [{ close: boundary }] })).series).toEqual(boundary);
+  });
+
+  test("keeps metadata usable without candle data", () => {
+    const { meta } = good().chart.result[0];
+    const expected = { ...quote, series: [] };
+    expect(parseQuote({ chart: { result: [{ meta }], error: null } })).toEqual(expected);
+    for (const indicators of [null, {}, { quote: [] }, { quote: [{}] },
+      { quote: [{ close: [] }] }, { quote: [{ close: [null, null] }] }]) {
+      expect(parseQuote(payload(meta, indicators))).toEqual(expected);
+    }
   });
 
   test("rejects source errors, malformed metadata and invalid numeric fields", () => {
