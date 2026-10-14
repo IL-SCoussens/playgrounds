@@ -1,0 +1,17 @@
+{
+  "selfAgentId": "T-01a13ad4-1b6a-709f-be69-9a8ef6b31cf2",
+  "summary": "Build and verify a standalone, free stock index board for six major markets.",
+  "dispatcher": { "firstName": "Seth" },
+  "goal": "Deliver index-board without changing the root Next.js app; open one PR against main when GitHub App access is available.",
+  "rootSlug": "index-board",
+  "execution": "Amp workers in isolated local worktrees; requested orchestrate skill and cli.ts are unavailable. Pushes await GitHub App access.",
+  "phases": ["ground", "sketch", "agree", "implement", "verify", "deliver"],
+  "design": "Request-driven per-symbol cache with one in-flight request and a 60-second cooldown on all attempts, including failures. Chosen over background polling for its smaller lifecycle and no idle traffic. Independent design reviewer agreed. Keep source timestamps distinct from fetch success and preserve last good quotes on failure.",
+  "tasks": [
+    { "id": "server", "branch": "orch/index-board/server", "pathsAllowed": ["index-board/quotes.ts", "index-board/server.ts"], "brief": "Implement Yahoo parsing, per-symbol cache and Bun HTTP server.", "status": "pending" },
+    { "id": "page", "branch": "orch/index-board/page", "pathsAllowed": ["index-board/index.html"], "brief": "Build responsive plain HTML/CSS/JS page with six indices, local timestamps, 60-second polling and stale/unavailable states.", "status": "pending" },
+    { "id": "tests", "branch": "orch/index-board/tests", "pathsAllowed": ["index-board/quotes.test.ts", "index-board/fixtures/"], "brief": "Test source fixture parsing and cache behavior including failures, concurrency and minute boundary.", "status": "pending" },
+    { "id": "readme", "branch": "orch/index-board/readme", "pathsAllowed": ["index-board/README.md"], "brief": "Document Bun run/test commands, unofficial free Yahoo source, delay and cache caveats.", "status": "pending" },
+    { "id": "verify", "branch": "orch/index-board/verify", "pathsAllowed": [], "brief": "Run the integrated server, fetch the live API, inspect both widths and stale/unavailable states, and observe a real 60-second refresh.", "dependsOn": ["server", "page", "tests", "readme"], "status": "pending" }
+  ]
+}
